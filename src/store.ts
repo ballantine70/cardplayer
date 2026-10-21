@@ -29,6 +29,15 @@ export interface DealOptions {
   players: number;
   perPlayer: number | null;
   faceUp: boolean;
+  /** Deal into these players' hands instead of rows on the table. */
+  hands?: string[];
+}
+
+/** Changes received from the server; null removes the entry. */
+export interface RemoteChanges {
+  items?: Record<string, BoardItem | null>;
+  cards?: Record<string, Card | null>;
+  assets?: Record<string, Asset>;
 }
 
 interface State extends Omit<BoardData, 'version'> {
@@ -66,6 +75,11 @@ interface Actions {
   addToDeck(deckId: string, itemIds: string[]): void;
   /** Stack selected cards and decks into a new deck. */
   stackIntoDeck(itemIds: string[]): string | null;
+  /** Move cards into a player's hand. */
+  takeIntoHand(itemIds: string[], playerId: string): void;
+  /** Put a card from a hand onto the table. */
+  playFromHand(itemId: string, at: { x: number; y: number }, faceUp?: boolean): void;
+  applyRemote(changes: RemoteChanges): void;
   loadBoard(data: BoardData): void;
   clearBoard(): void;
 }
@@ -149,7 +163,7 @@ export const useBoard = create<Store>()((set, get) => ({
     const block = unionRects(placed)!;
     const origin = findFreeSpot(
       { x: at.x - block.w / 2, y: at.y - block.h / 2, w: block.w, h: block.h },
-      Object.values(items).map((it) => itemBounds(it, s.cards)),
+      Object.values(items).filter(onTable).map((it) => itemBounds(it, s.cards)),
       gap,
     );
     const ids = placed.map((p) => {
@@ -302,11 +316,12 @@ export const useBoard = create<Store>()((set, get) => ({
     return id;
   },
 
-  dealDeck(deckId, { players, perPlayer, faceUp }) {
+  dealDeck(deckId, { players, perPlayer, faceUp, hands }) {
     const s = get();
     const deck = s.items[deckId];
     if (deck?.kind !== 'deck') return;
-    const plan = planDeal(deck.cardIds, players, perPlayer);
+    const seats = hands?.length ? hands.length : players;
+    const plan = planDeal(deck.cardIds, seats, perPlayer);
     const items = { ...s.items };
     let z = maxZ(items);
     const { w, h } = itemBounds(deck, s.cards);
@@ -314,6 +329,13 @@ export const useBoard = create<Store>()((set, get) => ({
     const overlap = w * 0.4;
     const texts = Object.values(items).filter((it): it is TextItem => it.kind === 'text');
     plan.hands.forEach((hand, p) => {
+      if (hands?.length) {
+        hand.forEach((cardId) => {
+          const id = uid();
+          items[id] = { kind: 'card', id, cardId, x: 0, y: 0, z: ++z, faceUp: true, holder: hands[p] };
+        });
+        return;
+      }
       const rowY = top + p * (h + 60);
       const labelX = deck.x - 260;
       const label = `Player ${p + 1}`;
@@ -427,6 +449,48 @@ export const useBoard = create<Store>()((set, get) => ({
     return id;
   },
 
+  takeIntoHand(itemIds, playerId) {
+    const items = { ...get().items };
+    let z = maxZ(items);
+    for (const id of itemIds) {
+      const it = items[id];
+      if (it?.kind === 'card') items[id] = { ...it, holder: playerId, faceUp: true, z: ++z };
+    }
+    set({ items, selection: get().selection.filter((id) => !itemIds.includes(id)) });
+  },
+
+  playFromHand(itemId, at, faceUp = true) {
+    const it = get().items[itemId];
+    if (it?.kind !== 'card') return;
+    const { holder: _, ...rest } = it;
+    set({ items: { ...get().items, [itemId]: { ...rest, x: at.x, y: at.y, faceUp, z: maxZ(get().items) + 1 } } });
+  },
+
+  applyRemote({ items: itemChanges, cards: cardChanges, assets: assetChanges }) {
+    const s = get();
+    const patch: Partial<State> = {};
+    if (itemChanges) {
+      const items = { ...s.items };
+      for (const [id, it] of Object.entries(itemChanges)) {
+        if (it) items[id] = it;
+        else delete items[id];
+      }
+      patch.items = items;
+      patch.selection = s.selection.filter((id) => items[id]);
+      patch.dragging = s.dragging.filter((id) => items[id]);
+    }
+    if (cardChanges) {
+      const cards = { ...s.cards };
+      for (const [id, c] of Object.entries(cardChanges)) {
+        if (c) cards[id] = c;
+        else delete cards[id];
+      }
+      patch.cards = cards;
+    }
+    if (assetChanges) patch.assets = { ...s.assets, ...assetChanges };
+    set(patch);
+  },
+
   loadBoard(data) {
     set({ ...emptyState(), assets: data.assets, cards: data.cards, items: data.items, camera: data.camera });
   },
@@ -441,7 +505,17 @@ export function boardData(s: Store = useBoard.getState()): BoardData {
 }
 
 export function selectionBounds(s: Store) {
-  return unionRects(s.selection.filter((id) => s.items[id]).map((id) => itemBounds(s.items[id], s.cards)));
+  return unionRects(
+    s.selection
+      .map((id) => s.items[id])
+      .filter((it) => it && onTable(it))
+      .map((it) => itemBounds(it, s.cards)),
+  );
+}
+
+/** False for cards held in a player's hand. */
+export function onTable(it: BoardItem): boolean {
+  return !(it.kind === 'card' && it.holder);
 }
 
 export function isImage(it: BoardItem | undefined): it is ImageItem {

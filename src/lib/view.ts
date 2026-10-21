@@ -24,6 +24,6 @@ export function zoomToFit() {
   const { w, h } = boardSize();
   if (!b) return s.setCamera({ x: w / 2, y: h / 2, zoom: 1 });
   const margin = 80;
-  const zoom = Math.min(2, Math.max(0.05, Math.min((w - margin * 2) / b.w, (h - margin * 2) / b.h)));
+  const zoom = Math.min(1, Math.max(0.05, Math.min((w - margin * 2) / b.w, (h - margin * 2) / b.h)));
   s.setCamera({ zoom, x: w / 2 - (b.x + b.w / 2) * zoom, y: h / 2 - (b.y + b.h / 2) * zoom });
 }

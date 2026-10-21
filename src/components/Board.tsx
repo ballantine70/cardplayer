@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Rect } from '../types';
 import { containsPoint, intersects, itemBounds, normaliseRect, screenToWorld, zoomAt } from '../lib/geometry';
-import { useBoard } from '../store';
+import { onTable, useBoard } from '../store';
 import { useUi } from '../ui';
+import { sendCursor } from '../sync/client';
+import { useSession } from '../sync/session';
+import { Cursors } from './Cursors';
+import { HandTray } from './HandTray';
 import { ItemView } from './ItemView';
+import { PlayersPanel } from './PlayersPanel';
 import { SelectionBar } from './SelectionBar';
 
 type Gesture =
@@ -18,6 +23,8 @@ type Gesture =
       clickedId: string;
       /** Selection to apply if the pointer is released without moving. */
       selectOnClick: string[] | null;
+      /** The card was picked up from the player's hand. */
+      fromHand: boolean;
     }
   | { type: 'resize'; id: string; wx: number; wy: number; w: number; h: number };
 
@@ -31,6 +38,8 @@ export function Board() {
   const spaceHeld = useRef(false);
   const [panning, setPanning] = useState(false);
   const [marquee, setMarquee] = useState<Rect | null>(null);
+  const [overTray, setOverTray] = useState(false);
+  const inRoom = useSession((s) => s.roomId !== null);
 
   const items = useBoard((s) => s.items);
   const camera = useBoard((s) => s.camera);
@@ -39,7 +48,7 @@ export function Board() {
   const dropTargetId = useBoard((s) => s.dropTargetId);
   const shufflingId = useBoard((s) => s.shufflingId);
 
-  const sorted = useMemo(() => Object.values(items).sort((a, b) => a.z - b.z), [items]);
+  const sorted = useMemo(() => Object.values(items).filter(onTable).sort((a, b) => a.z - b.z), [items]);
   const selectedSet = useMemo(() => new Set(selection), [selection]);
   const draggingSet = useMemo(() => new Set(dragging), [dragging]);
 
@@ -104,6 +113,22 @@ export function Board() {
     }
 
     const target = e.target as HTMLElement;
+
+    // Picking a card up from the hand puts it on the table under the pointer.
+    const handEl = target.closest<HTMLElement>('[data-hand-card]');
+    if (handEl) {
+      const id = handEl.dataset.handCard!;
+      const it = s.items[id];
+      const card = it?.kind === 'card' ? s.cards[it.cardId] : undefined;
+      if (!card) return;
+      const at = { x: w.x - card.width / 2, y: w.y - card.height / 2 };
+      s.playFromHand(id, at);
+      s.select([id]);
+      gesture.current = { type: 'move', wx: w.x, wy: w.y, origins: { [id]: at }, moved: false, clickedId: id, selectOnClick: null, fromHand: true };
+      return;
+    }
+    if (target.closest('.hand-tray')) return;
+
     const itemEl = target.closest<HTMLElement>('[data-item]');
     if (!itemEl) {
       const base = e.shiftKey ? s.selection : [];
@@ -145,15 +170,16 @@ export function Board() {
       const it = st.items[sid];
       if (it) origins[sid] = { x: it.x, y: it.y };
     }
-    gesture.current = { type: 'move', wx: w.x, wy: w.y, origins, moved: false, clickedId: id, selectOnClick };
+    gesture.current = { type: 'move', wx: w.x, wy: w.y, origins, moved: false, clickedId: id, selectOnClick, fromHand: false };
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
-    const g = gesture.current;
-    if (!g) return;
     const s = useBoard.getState();
     const p = local(e);
     const w = screenToWorld(s.camera, p.x, p.y);
+    sendCursor(w.x, w.y);
+    const g = gesture.current;
+    if (!g) return;
 
     switch (g.type) {
       case 'pan':
@@ -163,7 +189,7 @@ export function Board() {
         const r = normaliseRect(g.wx, g.wy, w.x, w.y);
         setMarquee(r);
         const hit = Object.values(s.items)
-          .filter((it) => intersects(r, itemBounds(it, s.cards)))
+          .filter((it) => onTable(it) && intersects(r, itemBounds(it, s.cards)))
           .map((it) => it.id);
         s.select([...new Set([...g.base, ...hit])]);
         break;
@@ -180,7 +206,9 @@ export function Board() {
         const pos: Record<string, { x: number; y: number }> = {};
         for (const [id, o] of Object.entries(g.origins)) pos[id] = { x: o.x + dx, y: o.y + dy };
         s.setPositions(pos);
-        s.setDropTarget(findDropTarget(Object.keys(g.origins), w.x, w.y));
+        const tray = inRoom && overHandTray(e) && Object.keys(g.origins).every((id) => s.items[id]?.kind === 'card');
+        setOverTray(tray);
+        s.setDropTarget(tray ? null : findDropTarget(Object.keys(g.origins), w.x, w.y));
         break;
       }
       case 'resize': {
@@ -192,21 +220,29 @@ export function Board() {
     }
   };
 
-  const onPointerUp = () => {
+  const onPointerUp = (e: React.PointerEvent) => {
     const g = gesture.current;
     gesture.current = null;
     setPanning(false);
     setMarquee(null);
+    setOverTray(false);
     if (!g) return;
     const s = useBoard.getState();
+    const me = useSession.getState().me.id;
     if (g.type === 'move') {
+      const ids = Object.keys(g.origins);
       if (!g.moved) {
-        if (g.selectOnClick) s.select(g.selectOnClick);
+        if (g.fromHand) {
+          // A click on a hand card just selects it.
+          s.takeIntoHand(ids, me);
+          s.select(ids);
+        } else if (g.selectOnClick) s.select(g.selectOnClick);
       } else {
         const target = s.dropTargetId;
         s.setDragging([]);
         s.setDropTarget(null);
-        if (target) s.addToDeck(target, Object.keys(g.origins));
+        if (inRoom && overHandTray(e) && ids.every((id) => s.items[id]?.kind === 'card')) s.takeIntoHand(ids, me);
+        else if (target) s.addToDeck(target, ids);
       }
     }
   };
@@ -268,6 +304,7 @@ export function Board() {
             shuffling={shufflingId === it.id}
           />
         ))}
+        {inRoom && <Cursors />}
         {marquee && (
           <div
             className="marquee"
@@ -276,6 +313,8 @@ export function Board() {
         )}
       </div>
       {dragging.length === 0 && <SelectionBar />}
+      {inRoom && <PlayersPanel />}
+      {inRoom && <HandTray highlight={overTray} />}
       {sorted.length === 0 && (
         <div className="empty-hint">
           <p>Paste, drop or load images to start.</p>
@@ -284,6 +323,11 @@ export function Board() {
       )}
     </div>
   );
+}
+
+function overHandTray(e: { clientX: number; clientY: number }) {
+  const r = document.querySelector('.hand-tray')?.getBoundingClientRect();
+  return !!r && e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
 }
 
 /** The topmost deck under the pointer that is not part of the dragged set. */

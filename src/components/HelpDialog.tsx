@@ -11,6 +11,7 @@ const rows: [string, string][] = [
   ['Flip', 'Double-click a card, or press F'],
   ['Shuffle', 'Select a deck and press S'],
   ['Add a label', 'Double-click empty space'],
+  ['Hand (online)', 'Drag cards into the tray at the bottom; drag them out to play them'],
   ['Delete', 'Delete or Backspace'],
 ];
 

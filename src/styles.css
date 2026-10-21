@@ -566,3 +566,184 @@ legend {
 .help dd {
   margin: 0;
 }
+
+/* Online play */
+a.button {
+  display: inline-block;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 6px;
+  padding: 5px 10px;
+  color: inherit;
+  text-decoration: none;
+}
+a.button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+small.block {
+  display: block;
+}
+.status {
+  align-self: center;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--muted);
+}
+.status.online {
+  color: #2e7d4f;
+}
+.status.missing {
+  color: var(--danger);
+}
+.notice {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  gap: 8px;
+}
+
+.cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  z-index: 1000001;
+  transition: transform 0.08s linear;
+}
+.cursor > * {
+  scale: calc(1 / var(--zoom));
+  transform-origin: 0 0;
+}
+.cursor span {
+  position: absolute;
+  left: 14px;
+  top: 16px;
+  background: var(--colour);
+  color: #fff;
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.players {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  width: 220px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px #0001;
+  padding: 6px;
+  z-index: 5;
+}
+.players-head {
+  font-weight: 600;
+  padding: 2px 6px 6px;
+}
+.player-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: none;
+  text-align: left;
+  padding: 4px 6px;
+}
+.player-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot.offline {
+  opacity: 0.35;
+}
+.peek {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 6px 8px 24px;
+}
+.peek img {
+  height: 56px;
+  border-radius: 4px;
+  box-shadow: 0 1px 2px #0003;
+}
+
+.hand-tray {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  max-width: calc(100% - 24px);
+  min-width: 320px;
+  min-height: 160px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 4px 16px #0002;
+  padding: 6px 12px 12px;
+  z-index: 5;
+}
+.hand-tray.highlight {
+  border-color: var(--drop);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--drop) 35%, transparent);
+}
+.hand-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.hand-empty {
+  margin: 36px 0 0;
+  text-align: center;
+}
+.hand-cards {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+.hand-card {
+  flex-shrink: 0;
+  cursor: grab;
+  border-radius: 6px;
+  transition: translate 0.15s ease;
+}
+.hand-card:hover {
+  translate: 0 -6px;
+}
+.hand-card.selected {
+  outline: 2px solid var(--select);
+  outline-offset: 2px;
+}
+.hand-card .card {
+  box-shadow: 0 1px 3px #0003;
+}
+
+.colours {
+  display: flex;
+  gap: 8px;
+}
+.swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  padding: 0;
+  border: 2px solid transparent;
+}
+.swatch.chosen {
+  border-color: var(--ink);
+}

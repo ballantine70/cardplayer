@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 
-export type Dialog = { type: 'build'; itemIds: string[] } | { type: 'deal'; deckId: string } | { type: 'help' };
+export type Dialog =
+  | { type: 'build'; itemIds: string[] }
+  | { type: 'deal'; deckId: string }
+  | { type: 'help' }
+  | { type: 'online' }
+  | { type: 'room-settings' }
+  | { type: 'name' };
 
 interface Ui {
   dialog: Dialog | null;

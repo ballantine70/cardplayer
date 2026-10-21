@@ -19,6 +19,8 @@ export interface Card {
   description: string;
   /** The deck the card was created in, used to gather cards back. */
   homeDeckId: string;
+  /** Set when the server withheld this card's face and details from this player. */
+  hidden?: boolean;
 }
 
 interface ItemBase {
@@ -39,6 +41,8 @@ export interface CardItem extends ItemBase {
   kind: 'card';
   cardId: string;
   faceUp: boolean;
+  /** Player whose hand the card is in; absent when it is on the table. */
+  holder?: string;
 }
 
 export interface DeckItem extends ItemBase {
@@ -76,4 +80,18 @@ export interface BoardData {
   cards: Record<string, Card>;
   items: Record<string, BoardItem>;
   camera: Camera;
+}
+
+export interface RoomSettings {
+  /** Only a hand's holder can see its cards. */
+  privateHands: boolean;
+  /** Nobody can see face-down cards on the table or the order of a deck. */
+  hideFaceDown: boolean;
+}
+
+export interface Player {
+  id: string;
+  name: string;
+  colour: string;
+  online: boolean;
 }

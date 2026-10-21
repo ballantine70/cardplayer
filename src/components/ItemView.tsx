@@ -42,11 +42,13 @@ function ImageBody({ assetId, w, h, selected }: { assetId: string; w: number; h:
 
 export function CardFace({ cardId, faceUp }: { cardId: string; faceUp: boolean }) {
   const card = useBoard((s) => s.cards[cardId]);
-  const src = useBoard((s) => (card ? s.assets[faceUp ? card.faceAssetId : card.backAssetId]?.src : undefined));
+  // A card the server has not revealed yet shows its back.
+  const showFace = faceUp && !card?.hidden;
+  const src = useBoard((s) => (card ? s.assets[showFace ? card.faceAssetId : card.backAssetId]?.src : undefined));
   if (!card) return null;
   return (
-    <div className="card" style={{ width: card.width, height: card.height }} title={faceUp ? card.name : undefined}>
-      <img src={src} draggable={false} alt={faceUp ? card.name : 'Card back'} />
+    <div className="card" style={{ width: card.width, height: card.height }} title={showFace ? card.name : undefined}>
+      <img src={src} draggable={false} alt={showFace ? card.name : 'Card back'} />
     </div>
   );
 }

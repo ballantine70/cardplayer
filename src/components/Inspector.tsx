@@ -31,12 +31,13 @@ export function Inspector() {
   if (item.kind === 'card') {
     const card = cards[item.cardId];
     if (!card) return null;
+    const showFace = (item.faceUp || !!item.holder) && !card.hidden;
     return (
       <aside className="inspector no-board">
-        <h3>Card</h3>
-        <img className="inspector-preview" src={assets[item.faceUp ? card.faceAssetId : card.backAssetId]?.src} alt="" />
-        {!item.faceUp && <p className="muted">Face down</p>}
-        <CardFields card={card} />
+        <h3>{item.holder ? 'Card in your hand' : 'Card'}</h3>
+        <img className="inspector-preview" src={assets[showFace ? card.faceAssetId : card.backAssetId]?.src} alt="" />
+        {!item.faceUp && !item.holder && <p className="muted">Face down</p>}
+        {card.hidden ? <p className="muted">Hidden from you.</p> : <CardFields card={card} />}
       </aside>
     );
   }
@@ -57,6 +58,16 @@ export function Inspector() {
         {ordered.map((id) => {
           const c = cards[id];
           if (!c) return null;
+          if (c.hidden) {
+            return (
+              <li key={id}>
+                <div className="deck-list-row muted">
+                  <img src={assets[c.backAssetId]?.src} alt="" />
+                  <span className="name">Hidden card</span>
+                </div>
+              </li>
+            );
+          }
           const open = expanded === id;
           return (
             <li key={id} className={open ? 'open' : undefined}>

@@ -4,8 +4,9 @@
   "description": "Whiteboard for building card decks from images and playing with them",
   "scripts": {
     "dev": "vite",
+    "dev:server": "node --watch server/index.ts",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
+    "start": "node server/index.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -23,11 +24,14 @@
   "dependencies": {
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "ws": "^8.22.0",
     "zustand": "^5.0.15"
   },
   "devDependencies": {
+    "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^6.1.2",
     "jsdom": "^29.1.1",
     "typescript": "^7.0.2",
@@ -35,5 +39,8 @@
     "vitest": "^5.0.5"
   },
   "private": true,
-  "type": "module"
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  }
 }

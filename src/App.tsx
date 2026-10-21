@@ -11,6 +11,9 @@ import { loadSavedBoard, saveBoard } from './lib/persist';
 import { viewportCentre, zoomToFit } from './lib/view';
 import { boardData, useBoard } from './store';
 import { useUi } from './ui';
+import { NameDialog, OnlineDialog, RoomSettingsDialog } from './components/OnlineDialogs';
+import { connectRoom, disconnectRoom } from './sync/client';
+import { roomIdFromPath, useSession } from './sync/session';
 
 async function addFiles(files: File[], at?: { x: number; y: number }) {
   const images = files.filter((f) => f.type.startsWith('image/'));
@@ -20,37 +23,62 @@ async function addFiles(files: File[], at?: { x: number; y: number }) {
   if (ok.length) useBoard.getState().addImages(ok, at ?? viewportCentre());
 }
 
+/** Read once: React may run effects twice in development, and the flag is removed from the URL. */
+const seedRequested = new URLSearchParams(location.search).has('seed');
+
+/** Restore the local board, then save changes as they happen. Returns a cleanup function. */
+function startLocal(onReady: () => void) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let unsub = () => {};
+  let cancelled = false;
+  loadSavedBoard()
+    .then((data) => {
+      if (data) useBoard.getState().loadBoard(data);
+      else zoomToFit();
+    })
+    .catch(() => zoomToFit())
+    .finally(() => {
+      if (cancelled) return;
+      onReady();
+      unsub = useBoard.subscribe((s, prev) => {
+        if (s.items === prev.items && s.cards === prev.cards && s.camera === prev.camera) return;
+        clearTimeout(timer);
+        timer = setTimeout(() => saveBoard(boardData()).catch((e) => console.error('Save failed', e)), 400);
+      });
+    });
+  return () => {
+    cancelled = true;
+    unsub();
+    clearTimeout(timer);
+  };
+}
+
 export function App() {
   const dialog = useUi((u) => u.dialog);
   const openDialog = useUi((u) => u.openDialog);
   const [loaded, setLoaded] = useState(false);
 
-  // Restore the last board, then save changes as they happen.
+  const roomId = useSession((s) => s.roomId);
+  const status = useSession((s) => s.status);
+
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let unsub = () => {};
+    const id = roomIdFromPath();
+    if (!id) return startLocal(() => setLoaded(true));
+    useSession.setState({ roomId: id, status: 'connecting' });
     let cancelled = false;
-    loadSavedBoard()
-      .then((data) => {
-        if (data) useBoard.getState().loadBoard(data);
-        else zoomToFit();
-      })
-      .catch(() => zoomToFit())
-      .finally(() => {
-        if (cancelled) return;
-        setLoaded(true);
-        unsub = useBoard.subscribe((s, prev) => {
-          if (s.items === prev.items && s.cards === prev.cards && s.camera === prev.camera) return;
-          clearTimeout(timer);
-          timer = setTimeout(() => saveBoard(boardData()).catch((e) => console.error('Save failed', e)), 400);
-        });
-      });
+    const seed = seedRequested;
+    history.replaceState(null, '', `/r/${id}`);
+    (seed ? loadSavedBoard().catch(() => null) : Promise.resolve(null)).then((board) => {
+      if (cancelled) return;
+      connectRoom(id, board);
+      setLoaded(true);
+      if (!useSession.getState().me.named) openDialog({ type: 'name' });
+    });
     return () => {
       cancelled = true;
-      unsub();
-      clearTimeout(timer);
+      disconnectRoom();
     };
-  }, []);
+  }, [openDialog]);
 
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
@@ -104,12 +132,23 @@ export function App() {
     <div className="app" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
       <Toolbar onImages={(files) => addFiles(files)} />
       <main>
-        {loaded && <Board />}
+        {loaded && status !== 'missing' && <Board />}
+        {roomId && status === 'missing' && (
+          <div className="notice">
+            <p>This room does not exist, or the server has lost it.</p>
+            <a className="button primary" href="/">
+              Back to your board
+            </a>
+          </div>
+        )}
         <Inspector />
       </main>
       {dialog?.type === 'build' && <BuildDeckDialog itemIds={dialog.itemIds} onClose={close} />}
       {dialog?.type === 'deal' && <DealDialog deckId={dialog.deckId} onClose={close} />}
       {dialog?.type === 'help' && <HelpDialog onClose={close} />}
+      {dialog?.type === 'online' && <OnlineDialog onClose={close} />}
+      {dialog?.type === 'room-settings' && <RoomSettingsDialog onClose={close} />}
+      {dialog?.type === 'name' && <NameDialog onClose={close} />}
     </div>
   );
 }
