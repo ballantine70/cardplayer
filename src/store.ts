@@ -1,0 +1,451 @@
+import { create } from 'zustand';
+import type { Asset, BoardData, BoardItem, Camera, Card, CardItem, DeckItem, ImageItem, TextItem } from './types';
+import { DEFAULT_CARD, findFreeSpot, itemBounds, unionRects } from './lib/geometry';
+import { planDeal, shuffle } from './lib/deckOps';
+
+export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+
+/** A card prepared for a new deck, before ids are assigned. */
+export interface NewCard {
+  face: Omit<Asset, 'id'>;
+  width: number;
+  height: number;
+  name: string;
+  value: string;
+  description: string;
+}
+
+export interface NewDeck {
+  name: string;
+  cards: NewCard[];
+  back: Omit<Asset, 'id'>;
+  x: number;
+  y: number;
+  /** Board items to remove once the deck exists (usually the source images). */
+  removeItemIds: string[];
+}
+
+export interface DealOptions {
+  players: number;
+  perPlayer: number | null;
+  faceUp: boolean;
+}
+
+interface State extends Omit<BoardData, 'version'> {
+  selection: string[];
+  /** Ids currently being dragged; their transitions are disabled. */
+  dragging: string[];
+  /** Deck highlighted as a drop target during a drag. */
+  dropTargetId: string | null;
+  /** Deck playing its shuffle animation. */
+  shufflingId: string | null;
+}
+
+interface Actions {
+  setCamera(cam: Camera): void;
+  select(ids: string[]): void;
+  setDragging(ids: string[]): void;
+  setDropTarget(id: string | null): void;
+  addImages(images: Omit<Asset, 'id'>[], at: { x: number; y: number }): void;
+  addText(at: { x: number; y: number }, text?: string): void;
+  setPositions(pos: Record<string, { x: number; y: number }>): void;
+  bringToFront(ids: string[]): void;
+  resizeImage(id: string, w: number, h: number): void;
+  deleteItems(ids: string[]): void;
+  updateCard(id: string, patch: Partial<Pick<Card, 'name' | 'value' | 'description'>>): void;
+  updateItem(id: string, patch: Partial<Pick<DeckItem, 'name'>> | Partial<Pick<TextItem, 'text'>>): void;
+  createDeck(deck: NewDeck): string;
+  shuffleDeck(id: string): void;
+  flip(ids: string[]): void;
+  /** Take the top card off a deck as a loose card item; returns its item id. */
+  drawCard(deckId: string, opts?: { faceUp?: boolean; at?: { x: number; y: number } }): string | null;
+  dealDeck(deckId: string, opts: DealOptions): void;
+  spreadDeck(deckId: string): void;
+  gatherDeck(deckId: string): void;
+  /** Put cards (and the contents of decks) on top of a deck. */
+  addToDeck(deckId: string, itemIds: string[]): void;
+  /** Stack selected cards and decks into a new deck. */
+  stackIntoDeck(itemIds: string[]): string | null;
+  loadBoard(data: BoardData): void;
+  clearBoard(): void;
+}
+
+export type Store = State & Actions;
+
+export const initialCamera: Camera = { x: 0, y: 0, zoom: 1 };
+
+const emptyState = (): State => ({
+  assets: {},
+  cards: {},
+  items: {},
+  camera: { ...initialCamera },
+  selection: [],
+  dragging: [],
+  dropTargetId: null,
+  shufflingId: null,
+});
+
+const maxZ = (items: Record<string, BoardItem>) =>
+  Object.values(items).reduce((m, it) => Math.max(m, it.z), 0);
+
+/** Remove cards and assets no longer referenced by any board item. */
+function collectGarbage(s: Pick<State, 'items' | 'cards' | 'assets'>) {
+  const cardIds = new Set<string>();
+  const assetIds = new Set<string>();
+  for (const it of Object.values(s.items)) {
+    if (it.kind === 'card') cardIds.add(it.cardId);
+    else if (it.kind === 'deck') it.cardIds.forEach((c) => cardIds.add(c));
+    else if (it.kind === 'image') assetIds.add(it.assetId);
+  }
+  const cards: Record<string, Card> = {};
+  for (const id of cardIds) {
+    const c = s.cards[id];
+    if (!c) continue;
+    cards[id] = c;
+    assetIds.add(c.faceAssetId);
+    assetIds.add(c.backAssetId);
+  }
+  const assets: Record<string, Asset> = {};
+  for (const id of assetIds) if (s.assets[id]) assets[id] = s.assets[id];
+  return { cards, assets };
+}
+
+/** Largest dimension a newly added image is shown at, in world units. */
+const IMAGE_MAX = 300;
+
+export const useBoard = create<Store>()((set, get) => ({
+  ...emptyState(),
+
+  setCamera: (camera) => set({ camera }),
+  select: (selection) => set({ selection }),
+  setDragging: (dragging) => set({ dragging }),
+  setDropTarget: (dropTargetId) => set({ dropTargetId }),
+
+  addImages(images, at) {
+    const s = get();
+    const assets = { ...s.assets };
+    const items = { ...s.items };
+    let z = maxZ(items);
+    const gap = 24;
+    const perRow = Math.max(1, Math.ceil(Math.sqrt(images.length)));
+    // Lay the images out in a grid relative to (0, 0), then move the grid somewhere free.
+    const placed: { img: Omit<Asset, 'id'>; x: number; y: number; w: number; h: number }[] = [];
+    let x = 0;
+    let y = 0;
+    let rowH = 0;
+    images.forEach((img, i) => {
+      const scale = Math.min(1, IMAGE_MAX / Math.max(img.width, img.height));
+      const w = img.width * scale;
+      const h = img.height * scale;
+      if (i > 0 && i % perRow === 0) {
+        x = 0;
+        y += rowH + gap;
+        rowH = 0;
+      }
+      placed.push({ img, x, y, w, h });
+      x += w + gap;
+      rowH = Math.max(rowH, h);
+    });
+    const block = unionRects(placed)!;
+    const origin = findFreeSpot(
+      { x: at.x - block.w / 2, y: at.y - block.h / 2, w: block.w, h: block.h },
+      Object.values(items).map((it) => itemBounds(it, s.cards)),
+      gap,
+    );
+    const ids = placed.map((p) => {
+      const assetId = uid();
+      assets[assetId] = { ...p.img, id: assetId };
+      const id = uid();
+      items[id] = { kind: 'image', id, assetId, x: origin.x + p.x, y: origin.y + p.y, w: p.w, h: p.h, z: ++z };
+      return id;
+    });
+    set({ assets, items, selection: ids });
+  },
+
+  addText(at, text = 'Label') {
+    const items = { ...get().items };
+    const id = uid();
+    items[id] = { kind: 'text', id, x: at.x, y: at.y, z: maxZ(items) + 1, text };
+    set({ items, selection: [id] });
+  },
+
+  setPositions(pos) {
+    const items = { ...get().items };
+    for (const [id, p] of Object.entries(pos)) {
+      if (items[id]) items[id] = { ...items[id], x: p.x, y: p.y };
+    }
+    set({ items });
+  },
+
+  bringToFront(ids) {
+    const items = { ...get().items };
+    let z = maxZ(items);
+    const ordered = ids.filter((id) => items[id]).sort((a, b) => items[a].z - items[b].z);
+    for (const id of ordered) items[id] = { ...items[id], z: ++z };
+    set({ items });
+  },
+
+  resizeImage(id, w, h) {
+    const it = get().items[id];
+    if (it?.kind !== 'image') return;
+    set({ items: { ...get().items, [id]: { ...it, w, h } } });
+  },
+
+  deleteItems(ids) {
+    const s = get();
+    const items = { ...s.items };
+    ids.forEach((id) => delete items[id]);
+    set({
+      items,
+      ...collectGarbage({ ...s, items }),
+      selection: s.selection.filter((id) => items[id]),
+    });
+  },
+
+  updateCard(id, patch) {
+    const c = get().cards[id];
+    if (c) set({ cards: { ...get().cards, [id]: { ...c, ...patch } } });
+  },
+
+  updateItem(id, patch) {
+    const it = get().items[id];
+    if (it) set({ items: { ...get().items, [id]: { ...it, ...patch } as BoardItem } });
+  },
+
+  createDeck(nd) {
+    const s = get();
+    const assets = { ...s.assets };
+    const cards = { ...s.cards };
+    const items = { ...s.items };
+    const deckId = uid();
+    const backId = uid();
+    assets[backId] = { ...nd.back, id: backId };
+    const cardIds = nd.cards.map((nc) => {
+      const faceId = uid();
+      assets[faceId] = { ...nc.face, id: faceId };
+      const id = uid();
+      cards[id] = {
+        id,
+        faceAssetId: faceId,
+        backAssetId: backId,
+        width: nc.width,
+        height: nc.height,
+        name: nc.name,
+        value: nc.value,
+        description: nc.description,
+        homeDeckId: deckId,
+      };
+      return id;
+    });
+    nd.removeItemIds.forEach((id) => delete items[id]);
+    // The first card in the dialog ends up on top of the deck.
+    items[deckId] = {
+      kind: 'deck',
+      id: deckId,
+      name: nd.name,
+      x: nd.x,
+      y: nd.y,
+      z: maxZ(items) + 1,
+      cardIds: cardIds.reverse(),
+      faceUp: false,
+    };
+    set({ items, ...collectGarbage({ items, cards, assets }), selection: [deckId] });
+    return deckId;
+  },
+
+  shuffleDeck(id) {
+    const deck = get().items[id];
+    if (deck?.kind !== 'deck') return;
+    set({
+      items: { ...get().items, [id]: { ...deck, cardIds: shuffle(deck.cardIds) } },
+      shufflingId: id,
+    });
+    setTimeout(() => {
+      if (get().shufflingId === id) set({ shufflingId: null });
+    }, 500);
+  },
+
+  flip(ids) {
+    const items = { ...get().items };
+    for (const id of ids) {
+      const it = items[id];
+      if (it?.kind === 'card') items[id] = { ...it, faceUp: !it.faceUp };
+      // Turning a deck over reverses its order as well as its facing.
+      else if (it?.kind === 'deck')
+        items[id] = { ...it, faceUp: !it.faceUp, cardIds: it.cardIds.slice().reverse() };
+    }
+    set({ items });
+  },
+
+  drawCard(deckId, opts = {}) {
+    const s = get();
+    const deck = s.items[deckId];
+    if (deck?.kind !== 'deck' || deck.cardIds.length === 0) return null;
+    const items = { ...s.items };
+    const cardIds = deck.cardIds.slice();
+    const cardId = cardIds.pop()!;
+    const card = s.cards[cardId];
+    const id = uid();
+    const at = opts.at ?? { x: deck.x + card.width + 30, y: deck.y };
+    items[id] = {
+      kind: 'card',
+      id,
+      cardId,
+      x: at.x,
+      y: at.y,
+      z: maxZ(items) + 1,
+      faceUp: opts.faceUp ?? deck.faceUp,
+    };
+    if (cardIds.length === 0) delete items[deckId];
+    else items[deckId] = { ...deck, cardIds };
+    set({ items, selection: s.selection.filter((sid) => items[sid]) });
+    return id;
+  },
+
+  dealDeck(deckId, { players, perPlayer, faceUp }) {
+    const s = get();
+    const deck = s.items[deckId];
+    if (deck?.kind !== 'deck') return;
+    const plan = planDeal(deck.cardIds, players, perPlayer);
+    const items = { ...s.items };
+    let z = maxZ(items);
+    const { w, h } = itemBounds(deck, s.cards);
+    const top = deck.y + h + 80;
+    const overlap = w * 0.4;
+    const texts = Object.values(items).filter((it): it is TextItem => it.kind === 'text');
+    plan.hands.forEach((hand, p) => {
+      const rowY = top + p * (h + 60);
+      const labelX = deck.x - 260;
+      const label = `Player ${p + 1}`;
+      if (players > 1 && !texts.some((t) => t.text === label && t.x === labelX && t.y === rowY)) {
+        const lid = uid();
+        items[lid] = { kind: 'text', id: lid, text: label, x: labelX, y: rowY, z: ++z };
+      }
+      hand.forEach((cardId, i) => {
+        const id = uid();
+        items[id] = { kind: 'card', id, cardId, x: deck.x + i * overlap, y: rowY, z: ++z, faceUp };
+      });
+    });
+    if (plan.remaining.length === 0) delete items[deckId];
+    else items[deckId] = { ...deck, cardIds: plan.remaining };
+    set({ items, selection: s.selection.filter((id) => items[id]) });
+  },
+
+  spreadDeck(deckId) {
+    const s = get();
+    const deck = s.items[deckId];
+    if (deck?.kind !== 'deck') return;
+    const items = { ...s.items };
+    let z = maxZ(items);
+    const { w, h } = itemBounds(deck, s.cards);
+    const perRow = Math.max(1, Math.ceil(Math.sqrt(deck.cardIds.length * 1.5)));
+    const ids: string[] = [];
+    // Top card first, in reading order.
+    deck.cardIds
+      .slice()
+      .reverse()
+      .forEach((cardId, i) => {
+        const id = uid();
+        items[id] = {
+          kind: 'card',
+          id,
+          cardId,
+          x: deck.x + (i % perRow) * (w + 20),
+          y: deck.y + Math.floor(i / perRow) * (h + 20),
+          z: ++z,
+          faceUp: true,
+        };
+        ids.push(id);
+      });
+    delete items[deckId];
+    set({ items, selection: ids });
+  },
+
+  gatherDeck(deckId) {
+    const s = get();
+    const deck = s.items[deckId];
+    if (deck?.kind !== 'deck') return;
+    const items = { ...s.items };
+    const gathered: string[] = [];
+    for (const it of Object.values(items)) {
+      if (it.kind === 'card' && s.cards[it.cardId]?.homeDeckId === deck.id) {
+        gathered.push(it.cardId);
+        delete items[it.id];
+      }
+    }
+    items[deckId] = { ...deck, cardIds: [...gathered, ...deck.cardIds], faceUp: false };
+    set({ items, selection: [deckId] });
+  },
+
+  addToDeck(deckId, itemIds) {
+    const s = get();
+    const deck = s.items[deckId];
+    if (deck?.kind !== 'deck') return;
+    const items = { ...s.items };
+    const cardIds = deck.cardIds.slice();
+    const sources = itemIds
+      .map((id) => items[id])
+      .filter((it): it is CardItem | DeckItem => !!it && it.id !== deckId && (it.kind === 'card' || it.kind === 'deck'))
+      .sort((a, b) => a.z - b.z);
+    for (const it of sources) {
+      if (it.kind === 'card') cardIds.push(it.cardId);
+      else cardIds.push(...it.cardIds);
+      delete items[it.id];
+    }
+    items[deckId] = { ...deck, cardIds };
+    set({ items, selection: [deckId] });
+  },
+
+  stackIntoDeck(itemIds) {
+    const s = get();
+    const sources = itemIds
+      .map((id) => s.items[id])
+      .filter((it): it is CardItem | DeckItem => !!it && (it.kind === 'card' || it.kind === 'deck'))
+      .sort((a, b) => a.z - b.z);
+    if (sources.length === 0) return null;
+    const items = { ...s.items };
+    const bottom = sources[0];
+    const cardIds: string[] = [];
+    for (const it of sources) {
+      if (it.kind === 'card') cardIds.push(it.cardId);
+      else cardIds.push(...it.cardIds);
+      delete items[it.id];
+    }
+    const top = sources[sources.length - 1];
+    const id = uid();
+    items[id] = {
+      kind: 'deck',
+      id,
+      name: bottom.kind === 'deck' ? bottom.name : 'Stack',
+      x: bottom.x,
+      y: bottom.y,
+      z: maxZ(items) + 1,
+      cardIds,
+      faceUp: top.faceUp,
+    };
+    set({ items, selection: [id] });
+    return id;
+  },
+
+  loadBoard(data) {
+    set({ ...emptyState(), assets: data.assets, cards: data.cards, items: data.items, camera: data.camera });
+  },
+
+  clearBoard() {
+    set({ ...emptyState(), camera: get().camera });
+  },
+}));
+
+export function boardData(s: Store = useBoard.getState()): BoardData {
+  return { version: 1, assets: s.assets, cards: s.cards, items: s.items, camera: s.camera };
+}
+
+export function selectionBounds(s: Store) {
+  return unionRects(s.selection.filter((id) => s.items[id]).map((id) => itemBounds(s.items[id], s.cards)));
+}
+
+export function isImage(it: BoardItem | undefined): it is ImageItem {
+  return it?.kind === 'image';
+}
+
+export { DEFAULT_CARD };
