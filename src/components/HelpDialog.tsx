@@ -1,4 +1,5 @@
 import { Modal } from './Modal';
+import { useSession } from '../sync/session';
 
 const rows: [string, string][] = [
   ['Pan', 'Scroll, or drag with space held / middle mouse button'],
@@ -16,10 +17,12 @@ const rows: [string, string][] = [
 ];
 
 export function HelpDialog({ onClose }: { onClose: () => void }) {
+  const inRoom = useSession((s) => s.roomId !== null);
+  const shown = rows.filter(([k]) => !(inRoom && k === 'Build a deck'));
   return (
     <Modal title="Controls" onClose={onClose}>
       <dl className="help">
-        {rows.map(([k, v]) => (
+        {shown.map(([k, v]) => (
           <div key={k}>
             <dt>{k}</dt>
             <dd>{v}</dd>

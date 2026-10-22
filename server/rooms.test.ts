@@ -8,10 +8,10 @@ import type { Card, CardItem, DeckItem } from '../src/types.ts';
 import type { ServerMessage } from '../src/shared/protocol.ts';
 import { Room, type Connection } from './rooms.ts';
 
-function fakeConn(playerId: string) {
+function fakeConn(playerId: string, admin = true) {
   const inbox: ServerMessage[] = [];
   const socket = { OPEN: 1, readyState: 1, send: (t: string) => inbox.push(JSON.parse(t)) } as unknown as WebSocket;
-  const conn: Connection = { socket, playerId, sentCards: new Map(), sentAssets: new Set() };
+  const conn: Connection = { socket, playerId, admin, sentCards: new Map(), sentAssets: new Set() };
   return { conn, inbox };
 }
 
@@ -47,7 +47,7 @@ function cardsSeen(inbox: ServerMessage[]) {
 function setup(settings?: { privateHands: boolean; hideFaceDown: boolean }) {
   const room = makeRoom(settings);
   const a = fakeConn('alice');
-  const b = fakeConn('bob');
+  const b = fakeConn('bob', false);
   room.join(a.conn, 'Alice', '#2f5d8a');
   room.join(b.conn, 'Bob', '#b3261e');
   room.applyPatch(a.conn, {
@@ -106,6 +106,15 @@ describe('Room', () => {
     const { room, b } = setup();
     room.applyPatch(b.conn, { cards: { c1: { ...card('c1', 'Forged') } } });
     expect(room.data.cards.c1.name).toBe('Ace');
+  });
+
+  it('only lets admins add new cards', () => {
+    const { room, a, b } = setup();
+    const extra: CardItem = { kind: 'card', id: 'i9', cardId: 'c9', x: 0, y: 0, z: 9, faceUp: true };
+    room.applyPatch(b.conn, { items: { i9: { item: extra, rev: 0 } }, cards: { c9: card('c9', 'Joker') } });
+    expect(room.data.cards.c9).toBeUndefined();
+    room.applyPatch(a.conn, { cards: { c9: card('c9', 'Joker') }, items: { i9: { item: extra, rev: 1 } } });
+    expect(room.data.cards.c9?.name).toBe('Joker');
   });
 
   it('drops cards that are no longer on the board', () => {

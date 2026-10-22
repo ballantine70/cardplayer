@@ -47,6 +47,8 @@ Simultaneous moves are resolved per object: each change carries the revision it 
 
 To put the whole site behind a password, set the `SITE_PASSWORD` variable on the service. Visitors then get a login page; a successful login is remembered in that browser for 30 days, and changing the password signs everyone out. Visiting `/api/logout` signs the current browser out. Leave the variable unset for an open site.
 
+To keep deck building to yourself, set `ADMIN_PASSWORD` as well. The home board (where decks are built and tables are created) then needs the admin password, while players with the site password can only join tables from invite links. Without it, everyone who can log in is treated as an admin. Either way, decks cannot be built on a shared table: only an admin can add cards to one, by copying their board in when creating it.
+
 Rooms and their images are written to disk. Attach a **volume** to the service so they survive redeploys; the server uses the volume's mount path automatically (`RAILWAY_VOLUME_MOUNT_PATH`), or `DATA_DIR` if set. Without a volume, rooms are lost on every deploy.
 
 ## Structure

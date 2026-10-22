@@ -13,7 +13,7 @@ import { boardData, useBoard } from './store';
 import { useUi } from './ui';
 import { NameDialog, OnlineDialog, RoomSettingsDialog } from './components/OnlineDialogs';
 import { connectRoom, disconnectRoom } from './sync/client';
-import { roomIdFromPath, useSession } from './sync/session';
+import { loadRole, roomIdFromPath, useSession } from './sync/session';
 
 async function addFiles(files: File[], at?: { x: number; y: number }) {
   const images = files.filter((f) => f.type.startsWith('image/'));
@@ -60,6 +60,12 @@ export function App() {
 
   const roomId = useSession((s) => s.roomId);
   const status = useSession((s) => s.status);
+
+  const admin = useSession((s) => s.admin);
+
+  useEffect(() => {
+    loadRole();
+  }, []);
 
   useEffect(() => {
     const id = roomIdFromPath();
@@ -135,10 +141,12 @@ export function App() {
         {loaded && status !== 'missing' && <Board />}
         {roomId && status === 'missing' && (
           <div className="notice">
-            <p>This room does not exist, or the server has lost it.</p>
-            <a className="button primary" href="/">
-              Back to your board
-            </a>
+            <p>This table does not exist, or the server has lost it.</p>
+            {admin && (
+              <a className="button primary" href="/">
+                Back to your board
+              </a>
+            )}
           </div>
         )}
         <Inspector />

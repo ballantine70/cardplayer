@@ -21,6 +21,8 @@ export interface RoomData {
 export interface Connection {
   socket: WebSocket;
   playerId: string;
+  /** Admins may add new cards (when copying their board into a new table). */
+  admin: boolean;
   /** What this connection has been sent, so only changes are re-sent. */
   sentCards: Map<string, Card>;
   sentAssets: Set<string>;
@@ -151,6 +153,8 @@ export class Room {
       for (const [id, card] of Object.entries(patch.cards)) {
         // Deletions are handled by garbage collection; hidden copies never overwrite real cards.
         if (!card || card.hidden || card.id !== id) continue;
+        // Decks are built on the admin board, so players cannot add cards to a table.
+        if (!d.cards[id] && !from.admin) continue;
         if (d.cards[id] && !visible.has(id)) continue;
         d.cards[id] = card;
         // The sender already holds this exact card.

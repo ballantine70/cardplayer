@@ -7,7 +7,7 @@ import { WebSocketServer } from 'ws';
 import type { ClientMessage } from '../src/shared/protocol.ts';
 import { ID_PATTERN } from '../src/shared/protocol.ts';
 import { RoomStore, type Connection } from './rooms.ts';
-import { SiteAuth, loginPage, safeNext } from './auth.ts';
+import { Auth, loginPage, safeNext } from './auth.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DATA_DIR = resolve(process.env.DATA_DIR ?? process.env.RAILWAY_VOLUME_MOUNT_PATH ?? 'data');
@@ -15,7 +15,7 @@ const STATIC_DIR = resolve('dist');
 const MAX_ASSET_BYTES = 25 * 1024 * 1024;
 
 const store = new RoomStore(DATA_DIR);
-const auth = process.env.SITE_PASSWORD ? new SiteAuth(process.env.SITE_PASSWORD) : null;
+const auth = new Auth(process.env.SITE_PASSWORD, process.env.ADMIN_PASSWORD);
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -112,21 +112,38 @@ function serveStatic(req: IncomingMessage, res: ServerResponse, pathname: string
   createReadStream(file).pipe(res);
 }
 
+/**
+ * The deck-building board (every app page except tables) and creating rooms
+ * are for admins; tables, their images and the built files are for everyone.
+ */
+function needsAdmin(req: IncomingMessage, pathname: string) {
+  if (pathname === '/api/rooms' && req.method === 'POST') return true;
+  if (pathname.startsWith('/api/') || pathname.startsWith('/r/') || pathname.startsWith('/assets/')) return false;
+  return true;
+}
+
 const server = createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://localhost');
-  if (auth) {
+  if (auth.enabled) {
     if (url.pathname === '/login') {
+      const role = url.searchParams.has('admin') ? 'admin' : 'site';
       const next = safeNext(url.searchParams.get('next'));
-      if (auth.isAuthorised(req)) return void res.writeHead(303, { location: next }).end();
+      const ok = role === 'admin' ? auth.isAdmin(req) : auth.hasSiteAccess(req);
+      if (ok) return void res.writeHead(303, { location: next }).end();
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
-      return void res.end(loginPage(url.searchParams.get('error'), next));
+      return void res.end(loginPage(url.searchParams.get('error'), next, role));
     }
     if (url.pathname === '/api/login' && req.method === 'POST') {
       return void auth.login(req, res).catch(() => res.writeHead(400).end());
     }
     if (url.pathname === '/api/logout') return auth.logout(res);
-    if (!auth.isPublic(url.pathname) && !auth.isAuthorised(req)) return auth.deny(req, res, url.pathname);
+    if (!auth.isPublic(url.pathname)) {
+      // The admin login also grants site access, so admin pages go straight to it.
+      if (needsAdmin(req, url.pathname) && !auth.isAdmin(req)) return auth.deny(req, res, url.pathname, 'admin');
+      if (!auth.hasSiteAccess(req)) return auth.deny(req, res, url.pathname, 'site');
+    }
   }
+  if (url.pathname === '/api/me') return json(res, 200, { admin: auth.isAdmin(req) });
   if (url.pathname.startsWith('/api/')) {
     handleApi(req, res, url.pathname.slice(5).split('/').filter(Boolean)).catch((e) => {
       console.error(e);
@@ -141,7 +158,7 @@ const wss = new WebSocketServer({
   server,
   path: '/ws',
   maxPayload: 5 * 1024 * 1024,
-  verifyClient: ({ req }: { req: IncomingMessage }) => !auth || auth.isAuthorised(req),
+  verifyClient: ({ req }: { req: IncomingMessage }) => auth.hasSiteAccess(req),
 });
 
 wss.on('connection', async (socket, req) => {
@@ -160,7 +177,7 @@ wss.on('connection', async (socket, req) => {
   const room = await store.get(roomId);
   if (!room) return socket.close(4404, 'No such room');
 
-  const conn: Connection = { socket, playerId, sentCards: new Map(), sentAssets: new Set() };
+  const conn: Connection = { socket, playerId, admin: auth.isAdmin(req), sentCards: new Map(), sentAssets: new Set() };
   const handle = (raw: string) => {
     let msg: ClientMessage;
     try {
@@ -204,5 +221,5 @@ process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
 server.listen(PORT, () =>
-  console.log(`Cardplayer listening on :${PORT}, data in ${DATA_DIR}, password ${auth ? 'required' : 'not set'}`),
+  console.log(`Cardplayer listening on :${PORT}, data in ${DATA_DIR}, site password ${process.env.SITE_PASSWORD ? 'set' : 'not set'}, admin password ${process.env.ADMIN_PASSWORD ? 'set' : 'not set'}`),
 );

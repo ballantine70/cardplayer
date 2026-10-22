@@ -1,11 +1,14 @@
 import { selectionBounds, useBoard } from '../store';
 import { worldToScreen } from '../lib/geometry';
 import { useUi } from '../ui';
+import { useSession } from '../sync/session';
 
 /** Contextual actions shown above the current selection. */
 export function SelectionBar() {
   const s = useBoard();
   const openDialog = useUi((u) => u.openDialog);
+  // Decks are built on the admin board, never on a shared table.
+  const canBuild = useSession((u) => u.roomId === null);
   const bounds = selectionBounds(s);
   if (!bounds) return null;
 
@@ -19,7 +22,7 @@ export function SelectionBar() {
   const style = { left: p.x, top: Math.max(8, p.y - 52) };
 
   const buttons: { label: string; title?: string; onClick: () => void; primary?: boolean }[] = [];
-  if (images.length > 0) {
+  if (images.length > 0 && canBuild) {
     buttons.push({
       label: `Build deck (${images.length})`,
       primary: true,

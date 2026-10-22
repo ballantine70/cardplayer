@@ -50,6 +50,8 @@ interface Session {
   status: Status;
   players: Player[];
   settings: RoomSettings;
+  /** May use the deck-building board. Assumed until the server says otherwise. */
+  admin: boolean;
   cursors: Record<string, { x: number; y: number; at: number }>;
 }
 
@@ -59,10 +61,21 @@ export const useSession = create<Session>()(() => ({
   status: 'connecting',
   players: [],
   settings: DEFAULT_SETTINGS,
+  admin: true,
   cursors: {},
 }));
 
 export function roomIdFromPath(pathname = location.pathname): string | null {
   const m = /^\/r\/([a-z0-9]{4,40})\/?$/.exec(pathname);
   return m ? m[1] : null;
+}
+
+/** Ask the server whether this browser is logged in as an admin. */
+export async function loadRole() {
+  try {
+    const res = await fetch('/api/me');
+    if (res.ok) useSession.setState({ admin: ((await res.json()) as { admin: boolean }).admin });
+  } catch {
+    // No server (e.g. the plain dev server): keep the default.
+  }
 }

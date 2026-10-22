@@ -11,6 +11,7 @@ export function Toolbar({ onImages }: { onImages: (files: File[]) => void }) {
   const zoom = useBoard((s) => s.camera.zoom);
   const roomId = useSession((s) => s.roomId);
   const status = useSession((s) => s.status);
+  const admin = useSession((s) => s.admin);
   const [copied, setCopied] = useState(false);
 
   return (
@@ -72,9 +73,11 @@ export function Toolbar({ onImages }: { onImages: (files: File[]) => void }) {
             {copied ? 'Link copied' : 'Copy invite link'}
           </button>
           <button onClick={() => useUi.getState().openDialog({ type: 'room-settings' })}>Room settings</button>
-          <a className="button" href="/">
-            Leave
-          </a>
+          {admin && (
+            <a className="button" href="/" title="Back to the admin board">
+              Leave
+            </a>
+          )}
           <button onClick={() => useUi.getState().openDialog({ type: 'help' })} aria-label="Help">
             ?
           </button>

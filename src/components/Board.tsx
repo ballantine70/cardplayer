@@ -317,8 +317,14 @@ export function Board() {
       {inRoom && <HandTray highlight={overTray} />}
       {sorted.length === 0 && (
         <div className="empty-hint">
-          <p>Paste, drop or load images to start.</p>
-          <p>Select a group of images, then choose “Build deck”.</p>
+          {inRoom ? (
+            <p>Nothing on the table yet. Decks are added from the admin board.</p>
+          ) : (
+            <>
+              <p>Paste, drop or load images to start.</p>
+              <p>Select a group of images, then choose “Build deck”.</p>
+            </>
+          )}
         </div>
       )}
     </div>
