@@ -76,6 +76,19 @@ describe('board store', () => {
     expect(deck(id).cardIds).toHaveLength(3);
   });
 
+  it('continues along each row when dealing again', () => {
+    const id = makeDeck(['a', 'b', 'c', 'd', 'e', 'f']);
+    s().dealDeck(id, { players: 2, perPlayer: 1, faceUp: false });
+    s().dealDeck(id, { players: 2, perPlayer: 2, faceUp: false });
+    const rows = new Map<number, number[]>();
+    for (const c of looseCards()) rows.set(c.y, [...(rows.get(c.y) ?? []), c.x]);
+    expect(rows.size).toBe(2);
+    for (const xs of rows.values()) {
+      expect(xs).toHaveLength(3);
+      expect(new Set(xs).size).toBe(3);
+    }
+  });
+
   it('gathers loose cards back into their home deck', () => {
     const id = makeDeck(['a', 'b', 'c']);
     s().drawCard(id, { faceUp: true });

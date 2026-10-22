@@ -346,9 +346,14 @@ export const useBoard = create<Store>()((set, get) => ({
         const lid = uid();
         items[lid] = { kind: 'text', id: lid, text: label, x: labelX, y: rowY, z: ++z };
       }
+      // Carry on after any cards already lying in this player's row.
+      const inRow = Object.values(items).filter(
+        (it) => it.kind === 'card' && !it.holder && Math.abs(it.y - rowY) < 1 && it.x >= deck.x - 1,
+      );
+      const startX = inRow.length ? Math.max(...inRow.map((it) => it.x)) + overlap : deck.x;
       hand.forEach((cardId, i) => {
         const id = uid();
-        items[id] = { kind: 'card', id, cardId, x: deck.x + i * overlap, y: rowY, z: ++z, faceUp };
+        items[id] = { kind: 'card', id, cardId, x: startX + i * overlap, y: rowY, z: ++z, faceUp };
       });
     });
     items[deckId] = { ...deck, cardIds: plan.remaining, cardWidth: w, cardHeight: h };
