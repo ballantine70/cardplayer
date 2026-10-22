@@ -7,6 +7,7 @@ import { WebSocketServer } from 'ws';
 import type { ClientMessage } from '../src/shared/protocol.ts';
 import { ID_PATTERN } from '../src/shared/protocol.ts';
 import { RoomStore, type Connection } from './rooms.ts';
+import { SiteAuth, loginPage, safeNext } from './auth.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DATA_DIR = resolve(process.env.DATA_DIR ?? process.env.RAILWAY_VOLUME_MOUNT_PATH ?? 'data');
@@ -14,6 +15,7 @@ const STATIC_DIR = resolve('dist');
 const MAX_ASSET_BYTES = 25 * 1024 * 1024;
 
 const store = new RoomStore(DATA_DIR);
+const auth = process.env.SITE_PASSWORD ? new SiteAuth(process.env.SITE_PASSWORD) : null;
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -112,6 +114,19 @@ function serveStatic(req: IncomingMessage, res: ServerResponse, pathname: string
 
 const server = createServer((req, res) => {
   const url = new URL(req.url ?? '/', 'http://localhost');
+  if (auth) {
+    if (url.pathname === '/login') {
+      const next = safeNext(url.searchParams.get('next'));
+      if (auth.isAuthorised(req)) return void res.writeHead(303, { location: next }).end();
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+      return void res.end(loginPage(url.searchParams.get('error'), next));
+    }
+    if (url.pathname === '/api/login' && req.method === 'POST') {
+      return void auth.login(req, res).catch(() => res.writeHead(400).end());
+    }
+    if (url.pathname === '/api/logout') return auth.logout(res);
+    if (!auth.isPublic(url.pathname) && !auth.isAuthorised(req)) return auth.deny(req, res, url.pathname);
+  }
   if (url.pathname.startsWith('/api/')) {
     handleApi(req, res, url.pathname.slice(5).split('/').filter(Boolean)).catch((e) => {
       console.error(e);
@@ -122,7 +137,12 @@ const server = createServer((req, res) => {
   }
 });
 
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 5 * 1024 * 1024 });
+const wss = new WebSocketServer({
+  server,
+  path: '/ws',
+  maxPayload: 5 * 1024 * 1024,
+  verifyClient: ({ req }: { req: IncomingMessage }) => !auth || auth.isAuthorised(req),
+});
 
 wss.on('connection', async (socket, req) => {
   const url = new URL(req.url ?? '/', 'http://localhost');
@@ -183,4 +203,6 @@ async function shutdown() {
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
-server.listen(PORT, () => console.log(`Cardplayer listening on :${PORT}, data in ${DATA_DIR}`));
+server.listen(PORT, () =>
+  console.log(`Cardplayer listening on :${PORT}, data in ${DATA_DIR}, password ${auth ? 'required' : 'not set'}`),
+);

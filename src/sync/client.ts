@@ -84,9 +84,18 @@ function open() {
     }
     if (closing) return;
     useSession.setState({ status: 'reconnecting' });
+    // A refused connection may mean the login has expired; the server redirects if so.
+    if (e.code === 1006) checkLogin();
     setTimeout(() => !closing && socket === ws && open(), retryDelay);
     retryDelay = Math.min(retryDelay * 2, 10_000);
   };
+}
+
+async function checkLogin() {
+  const res = await fetch('/api/health').catch(() => null);
+  if (!res) return;
+  const probe = await fetch(`/api/rooms/${roomId}`).catch(() => null);
+  if (probe?.status === 401) location.assign(`/login?next=${encodeURIComponent(location.pathname)}`);
 }
 
 function send(msg: ClientMessage) {
