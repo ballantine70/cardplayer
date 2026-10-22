@@ -262,6 +262,8 @@ export const useBoard = create<Store>()((set, get) => ({
       z: maxZ(items) + 1,
       cardIds: cardIds.reverse(),
       faceUp: false,
+      cardWidth: nd.cards[0]?.width,
+      cardHeight: nd.cards[0]?.height,
     };
     set({ items, ...collectGarbage({ items, cards, assets }), selection: [deckId] });
     return deckId;
@@ -300,7 +302,7 @@ export const useBoard = create<Store>()((set, get) => ({
     const cardId = cardIds.pop()!;
     const card = s.cards[cardId];
     const id = uid();
-    const at = opts.at ?? { x: deck.x + card.width + 30, y: deck.y };
+    const at = opts.at ?? { x: deck.x + card.width + 50, y: deck.y };
     items[id] = {
       kind: 'card',
       id,
@@ -310,8 +312,8 @@ export const useBoard = create<Store>()((set, get) => ({
       z: maxZ(items) + 1,
       faceUp: opts.faceUp ?? deck.faceUp,
     };
-    if (cardIds.length === 0) delete items[deckId];
-    else items[deckId] = { ...deck, cardIds };
+    // An emptied deck stays as a slot on the table.
+    items[deckId] = { ...deck, cardIds, cardWidth: card.width, cardHeight: card.height };
     set({ items, selection: s.selection.filter((sid) => items[sid]) });
     return id;
   },
@@ -325,7 +327,8 @@ export const useBoard = create<Store>()((set, get) => ({
     const items = { ...s.items };
     let z = maxZ(items);
     const { w, h } = itemBounds(deck, s.cards);
-    const top = deck.y + h + 80;
+    // Leave room for the deck's mat and label.
+    const top = deck.y + h + 110;
     const overlap = w * 0.4;
     const texts = Object.values(items).filter((it): it is TextItem => it.kind === 'text');
     plan.hands.forEach((hand, p) => {
@@ -348,8 +351,7 @@ export const useBoard = create<Store>()((set, get) => ({
         items[id] = { kind: 'card', id, cardId, x: deck.x + i * overlap, y: rowY, z: ++z, faceUp };
       });
     });
-    if (plan.remaining.length === 0) delete items[deckId];
-    else items[deckId] = { ...deck, cardIds: plan.remaining };
+    items[deckId] = { ...deck, cardIds: plan.remaining, cardWidth: w, cardHeight: h };
     set({ items, selection: s.selection.filter((id) => items[id]) });
   },
 
@@ -372,14 +374,14 @@ export const useBoard = create<Store>()((set, get) => ({
           kind: 'card',
           id,
           cardId,
-          x: deck.x + (i % perRow) * (w + 20),
+          x: deck.x + w + 60 + (i % perRow) * (w + 20),
           y: deck.y + Math.floor(i / perRow) * (h + 20),
           z: ++z,
           faceUp: true,
         };
         ids.push(id);
       });
-    delete items[deckId];
+    items[deckId] = { ...deck, cardIds: [], cardWidth: w, cardHeight: h };
     set({ items, selection: ids });
   },
 
@@ -444,6 +446,8 @@ export const useBoard = create<Store>()((set, get) => ({
       z: maxZ(items) + 1,
       cardIds,
       faceUp: top.faceUp,
+      cardWidth: s.cards[cardIds[0]]?.width,
+      cardHeight: s.cards[cardIds[0]]?.height,
     };
     set({ items, selection: [id] });
     return id;

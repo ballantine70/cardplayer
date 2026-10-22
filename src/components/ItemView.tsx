@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import type { BoardItem } from '../types';
-import { TEXT_SIZE } from '../lib/geometry';
+import { DEFAULT_CARD, TEXT_SIZE } from '../lib/geometry';
 import { useBoard } from '../store';
 import { useUi } from '../ui';
 
@@ -24,7 +24,9 @@ export const ItemView = memo(function ItemView({ item, selected, dragging, dropT
     <div className={classes.join(' ')} style={style} data-item={item.id}>
       {item.kind === 'image' && <ImageBody assetId={item.assetId} w={item.w} h={item.h} selected={selected} />}
       {item.kind === 'card' && <CardFace cardId={item.cardId} faceUp={item.faceUp} />}
-      {item.kind === 'deck' && <DeckBody cardIds={item.cardIds} faceUp={item.faceUp} name={item.name} />}
+      {item.kind === 'deck' && (
+        <DeckBody cardIds={item.cardIds} faceUp={item.faceUp} name={item.name} w={item.cardWidth} h={item.cardHeight} />
+      )}
       {item.kind === 'text' && <TextBody id={item.id} text={item.text} />}
     </div>
   );
@@ -53,18 +55,26 @@ export function CardFace({ cardId, faceUp }: { cardId: string; faceUp: boolean }
   );
 }
 
-function DeckBody({ cardIds, faceUp, name }: { cardIds: string[]; faceUp: boolean; name: string }) {
+function DeckBody({ cardIds, faceUp, name, w, h }: { cardIds: string[]; faceUp: boolean; name: string; w?: number; h?: number }) {
   const top = cardIds[cardIds.length - 1];
-  const card = useBoard((s) => s.cards[top]);
-  if (!card) return null;
-  // Thickness grows with the number of cards, capped so large decks stay tidy.
-  const layers = Math.min(6, Math.ceil(cardIds.length / 6));
-  const shadow = Array.from({ length: layers }, (_, i) => `${i + 1}px ${(i + 1) * 1.5}px 0 #d8d4cc, ${i + 1}px ${(i + 1) * 1.5}px 0 1px #9993`).join(', ');
+  const card = useBoard((s) => (top ? s.cards[top] : undefined));
+  const width = card?.width ?? w ?? DEFAULT_CARD.w;
+  const height = card?.height ?? h ?? DEFAULT_CARD.h;
+  // Visible edges under the top card; more for bigger decks, capped so large decks stay tidy.
+  const layers = cardIds.length < 2 ? 0 : Math.min(5, 2 + Math.floor(cardIds.length / 10));
+  const count = cardIds.length;
   return (
-    <div className="deck" style={{ boxShadow: shadow, width: card.width, height: card.height }}>
-      <CardFace cardId={top} faceUp={faceUp} />
-      <div className="deck-count" title={name}>
-        {cardIds.length}
+    <div className="deck" style={{ width, height }}>
+      <div className="deck-mat" />
+      {Array.from({ length: layers }, (_, i) => (
+        <div key={i} className="deck-layer" style={{ translate: `${(layers - i) * 4}px ${(layers - i) * 4}px` }} />
+      ))}
+      {card ? <CardFace cardId={top} faceUp={faceUp} /> : <div className="deck-empty">Empty deck</div>}
+      <div className="deck-label">
+        <span className="deck-name">{name}</span>
+        <span className="deck-count">
+          {count} card{count === 1 ? '' : 's'}
+        </span>
       </div>
     </div>
   );

@@ -26,7 +26,9 @@ export function SelectionBar() {
       onClick: () => openDialog({ type: 'build', itemIds: images.map((i) => i.id) }),
     });
   }
-  if (deck?.kind === 'deck') {
+  if (deck?.kind === 'deck' && deck.cardIds.length === 0) {
+    buttons.push({ label: 'Gather', title: 'Return this deck’s loose cards and turn it face down', onClick: () => s.gatherDeck(deck.id) });
+  } else if (deck?.kind === 'deck') {
     buttons.push(
       { label: 'Shuffle', title: 'Shuffle (S)', onClick: () => s.shuffleDeck(deck.id) },
       { label: 'Draw', title: 'Draw the top card face up (D)', onClick: () => s.drawCard(deck.id, { faceUp: true }) },

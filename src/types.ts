@@ -51,6 +51,9 @@ export interface DeckItem extends ItemBase {
   /** Bottom of the deck first; the last entry is the top card. */
   cardIds: string[];
   faceUp: boolean;
+  /** Card size, so the deck keeps its place on the table when empty. */
+  cardWidth?: number;
+  cardHeight?: number;
 }
 
 export interface TextItem extends ItemBase {

@@ -43,7 +43,12 @@ export function itemBounds(item: BoardItem, cards: Record<string, Card>): Rect {
     }
     case 'deck': {
       const top = cards[item.cardIds[item.cardIds.length - 1]];
-      return { x: item.x, y: item.y, w: top?.width ?? DEFAULT_CARD.w, h: top?.height ?? DEFAULT_CARD.h };
+      return {
+        x: item.x,
+        y: item.y,
+        w: top?.width ?? item.cardWidth ?? DEFAULT_CARD.w,
+        h: top?.height ?? item.cardHeight ?? DEFAULT_CARD.h,
+      };
     }
     case 'text':
       return { x: item.x, y: item.y, ...TEXT_SIZE };

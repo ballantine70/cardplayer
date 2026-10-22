@@ -221,22 +221,59 @@ main {
   position: relative;
   border-radius: 12px;
 }
-.deck > .card {
-  box-shadow: 0 0 0 1px #0002;
-}
-.deck-count {
+/* The mat marks where a deck sits, so it stands apart from dealt cards. */
+.deck-mat {
   position: absolute;
-  right: -10px;
-  top: -10px;
-  min-width: 28px;
-  height: 28px;
-  padding: 0 7px;
-  border-radius: 14px;
-  background: var(--ink);
-  color: var(--bg);
-  font-weight: 600;
+  inset: -20px;
+  border-radius: 22px;
+  border: 3px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  pointer-events: none;
+}
+.deck-layer {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: #fbfaf7;
+  box-shadow: 0 0 0 1px #0003;
+}
+.deck > .card {
+  position: relative;
+  box-shadow: 0 0 0 1px #0002, 0 1px 3px #0002;
+}
+.deck-empty {
+  position: absolute;
+  inset: 0;
   display: grid;
   place-items: center;
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 18px;
+}
+.deck-label {
+  position: absolute;
+  top: calc(100% + 28px);
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  white-space: nowrap;
+  padding: 3px 12px;
+  border-radius: 14px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 20px;
+  pointer-events: none;
+}
+.deck-name {
+  font-weight: 600;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.deck-count {
+  opacity: 0.85;
 }
 .item.shuffling .deck {
   animation: shuffle 0.45s ease;

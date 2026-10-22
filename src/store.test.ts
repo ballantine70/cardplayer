@@ -39,14 +39,16 @@ describe('board store', () => {
     expect(s().items[imageId]).toBeUndefined();
   });
 
-  it('draws the top card and removes an emptied deck', () => {
+  it('draws the top card and keeps an emptied deck as a slot', () => {
     const id = makeDeck(['one', 'two']);
     s().drawCard(id, { faceUp: true });
     expect(looseCards().map((c) => cardName(c.cardId))).toEqual(['one']);
     expect(looseCards()[0].faceUp).toBe(true);
     s().drawCard(id);
-    expect(s().items[id]).toBeUndefined();
+    expect(deck(id).cardIds).toEqual([]);
+    expect(deck(id).cardWidth).toBe(250);
     expect(looseCards()).toHaveLength(2);
+    expect(s().drawCard(id)).toBeNull();
   });
 
   it('flipping a deck reverses its order', () => {
@@ -63,6 +65,15 @@ describe('board store', () => {
     expect(deck(id).cardIds).toHaveLength(1);
     const labels = Object.values(s().items).filter((i) => i.kind === 'text');
     expect(labels).toHaveLength(2);
+  });
+
+  it('spreads a deck beside its slot and gathers it back', () => {
+    const id = makeDeck(['a', 'b', 'c']);
+    s().spreadDeck(id);
+    expect(deck(id).cardIds).toEqual([]);
+    expect(looseCards().every((c) => c.x > deck(id).x)).toBe(true);
+    s().gatherDeck(id);
+    expect(deck(id).cardIds).toHaveLength(3);
   });
 
   it('gathers loose cards back into their home deck', () => {
