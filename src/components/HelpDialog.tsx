@@ -10,6 +10,7 @@ const rows: [string, string][] = [
   ['Draw a card', 'Double-click a deck, press D, or Alt-drag the deck'],
   ['Return a card', 'Drag it onto a deck'],
   ['Flip', 'Double-click a card, or press F'],
+  ['Spread cards', 'Select several cards, then “Spread out”'],
   ['Shuffle', 'Select a deck and press S'],
   ['Add a label', 'Double-click empty space'],
   ['Hand (online)', 'Drag cards into the tray at the bottom; drag them out to play them'],

@@ -147,3 +147,38 @@ describe('double-sided decks', () => {
     expect(s().assets[second.backAssetId].name).toBe('shared');
   });
 });
+
+describe('spreading loose cards', () => {
+  beforeEach(() => s().clearBoard());
+
+  it('lays a pile out in a grid without overlaps, top card first, keeping facing', () => {
+    const id = makeDeck(['a', 'b', 'c', 'd', 'e']);
+    // Draw every card onto the same spot, making a pile; 'e' is drawn last, so it ends up on top.
+    const ids = ['e', 'd', 'c', 'b', 'a'].map(() => s().drawCard(id, { at: { x: 1000, y: 0 }, faceUp: false })!);
+    s().flip([ids[0]]);
+    s().spreadCards(ids);
+    const placed = ids.map((i) => s().items[i] as CardItem);
+    const spots = new Set(placed.map((c) => `${c.x},${c.y}`));
+    expect(spots.size).toBe(5);
+    for (const a of placed) {
+      for (const b of placed) {
+        if (a === b) continue;
+        expect(Math.abs(a.x - b.x) >= 250 || Math.abs(a.y - b.y) >= 350).toBe(true);
+      }
+    }
+    const first = placed.reduce((m, c) => (c.y < m.y || (c.y === m.y && c.x < m.x) ? c : m));
+    expect(cardName(first.cardId)).toBe('e');
+    expect(placed.filter((c) => c.faceUp)).toHaveLength(1);
+  });
+
+  it('moves clear of other things on the table', () => {
+    const id = makeDeck(['a', 'b', 'c', 'd']);
+    const ids = ['a', 'b', 'c'].map(() => s().drawCard(id, { at: { x: 0, y: 0 } })!);
+    s().spreadCards(ids);
+    // The emptying deck stays at (0, 0); nothing spread may sit on it.
+    for (const i of ids) {
+      const c = s().items[i] as CardItem;
+      expect(c.x >= 250 || c.y >= 350).toBe(true);
+    }
+  });
+});

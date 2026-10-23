@@ -47,6 +47,13 @@ export function SelectionBar() {
   if (cards.length > 0 && !deck) {
     buttons.push({ label: 'Flip', title: 'Flip (F)', onClick: () => s.flip(cards.map((c) => c.id)) });
   }
+  if (cards.length > 1) {
+    buttons.push({
+      label: 'Spread out',
+      title: 'Lay the selected cards out in a grid',
+      onClick: () => s.spreadCards(cards.map((c) => c.id)),
+    });
+  }
   if (cards.length + decks.length > 1) {
     buttons.push({
       label: 'Stack into deck',

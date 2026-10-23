@@ -75,6 +75,8 @@ interface Actions {
   drawCard(deckId: string, opts?: { faceUp?: boolean; at?: { x: number; y: number } }): string | null;
   dealDeck(deckId: string, opts: DealOptions): void;
   spreadDeck(deckId: string): void;
+  /** Lay loose cards out in a grid with gaps, keeping their facing. */
+  spreadCards(itemIds: string[]): void;
   gatherDeck(deckId: string): void;
   /** Put cards (and the contents of decks) on top of a deck. */
   addToDeck(deckId: string, itemIds: string[]): void;
@@ -414,6 +416,37 @@ export const useBoard = create<Store>()((set, get) => ({
     });
     items[deckId] = { ...deck, cardIds: plan.remaining, cardWidth: w, cardHeight: h };
     set({ items, selection: s.selection.filter((id) => items[id]) });
+  },
+
+  spreadCards(itemIds) {
+    const s = get();
+    const chosen = itemIds
+      .map((id) => s.items[id])
+      .filter((it): it is CardItem => it?.kind === 'card' && !it.holder);
+    if (chosen.length < 2) return;
+    // Rows top to bottom, then left to right; within a pile, the top card first.
+    const ordered = chosen.slice().sort((a, b) => Math.round(a.y) - Math.round(b.y) || Math.round(a.x) - Math.round(b.x) || b.z - a.z);
+    const bounds = ordered.map((it) => itemBounds(it, s.cards));
+    const cellW = Math.max(...bounds.map((r) => r.w));
+    const cellH = Math.max(...bounds.map((r) => r.h));
+    const gap = 30;
+    const perRow = Math.max(1, Math.min(ordered.length, Math.ceil(Math.sqrt(ordered.length * 2))));
+    const rows = Math.ceil(ordered.length / perRow);
+    const start = unionRects(bounds)!;
+    const block = { x: start.x, y: start.y, w: perRow * (cellW + gap) - gap, h: rows * (cellH + gap) - gap };
+    const chosenIds = new Set(ordered.map((it) => it.id));
+    const origin = findFreeSpot(
+      block,
+      Object.values(s.items)
+        .filter((it) => onTable(it) && !chosenIds.has(it.id))
+        .map((it) => itemBounds(it, s.cards)),
+      gap,
+    );
+    const pos: Record<string, { x: number; y: number }> = {};
+    ordered.forEach((it, i) => {
+      pos[it.id] = { x: origin.x + (i % perRow) * (cellW + gap), y: origin.y + Math.floor(i / perRow) * (cellH + gap) };
+    });
+    get().setPositions(pos);
   },
 
   spreadDeck(deckId) {

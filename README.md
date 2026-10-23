@@ -24,7 +24,7 @@ Node 22.18 or later is required: the server is TypeScript run directly by Node.
   - By default every card shares one back: generated (pattern and two colours) or taken from any image on the board.
   - For double-sided cards, choose *Each card has its own back*: the selected images are paired either alternately (front, back, front, back…, as in a double-sided PDF) or as all the fronts followed by all the backs. A card left without a pair gets the generated back.
   - Each card gets a name, value and description, editable in the dialog and later in the side panel.
-- **Play**: select a deck for *Shuffle*, *Draw*, *Deal…* (players, cards each, face up/down), *Flip*, *Spread* and *Gather*. Drag a card onto a deck to put it back on top; Alt-drag a deck to pull its top card off; double-click a card to flip it. *Stack into deck* combines selected cards.
+- **Play**: select a deck for *Shuffle*, *Draw*, *Deal…* (players, cards each, face up/down), *Flip*, *Spread* and *Gather*. Drag a card onto a deck to put it back on top; Alt-drag a deck to pull its top card off; double-click a card to flip it. *Stack into deck* combines selected cards, and *Spread out* lays selected loose cards out in a grid, top of a pile first.
 - **Navigate**: scroll to pan, Ctrl/⌘ + scroll or pinch to zoom, Space-drag or middle-drag to pan. Press `?` in the toolbar for the full list.
 
 The board is saved in the browser (IndexedDB) and can be exported or imported as a JSON file.
