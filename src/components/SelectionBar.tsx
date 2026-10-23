@@ -40,6 +40,9 @@ export function SelectionBar() {
       { label: 'Spread', title: 'Lay every card out face up', onClick: () => s.spreadDeck(deck.id) },
       { label: 'Gather', title: 'Return this deck’s loose cards and turn it face down', onClick: () => s.gatherDeck(deck.id) },
     );
+    if (canBuild) {
+      buttons.push({ label: 'Save to library', title: 'Keep a copy to use on tables', onClick: () => openDialog({ type: 'save-deck', deckId: deck.id }) });
+    }
   }
   if (cards.length > 0 && !deck) {
     buttons.push({ label: 'Flip', title: 'Flip (F)', onClick: () => s.flip(cards.map((c) => c.id)) });

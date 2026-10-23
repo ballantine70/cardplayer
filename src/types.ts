@@ -54,6 +54,8 @@ export interface DeckItem extends ItemBase {
   /** Card size, so the deck keeps its place on the table when empty. */
   cardWidth?: number;
   cardHeight?: number;
+  /** The library deck this was saved as or placed from. */
+  libraryId?: string;
 }
 
 export interface TextItem extends ItemBase {

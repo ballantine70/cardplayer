@@ -28,6 +28,12 @@ Node 22.18 or later is required: the server is TypeScript run directly by Node.
 
 The board is saved in the browser (IndexedDB) and can be exported or imported as a JSON file.
 
+## Deck library
+
+On the admin board, select a deck and choose *Save to library* to keep a copy on the server: its images and each card's name, value and description, in the deck's current order. Saving a deck that came from the library offers to update the saved copy or save a new one. *Library* in the toolbar lists saved decks, to put on the board, rename or delete.
+
+When creating a table with *Play online*, tick library decks to put them on it. Admins also get *Add deck* on a table to add more later. Tables get their own copy, so editing or deleting a library deck does not change tables already using it.
+
 ## Playing online
 
 *Play online* creates a room with its own link (`/r/<id>`), optionally copying the current board into it. Everyone with the link shares the board, sees each other's pointers, and has a hand tray at the bottom of the screen: drag cards into it to take them, drag them out to play them. *Deal…* can deal straight into the hands of everyone online.
@@ -60,3 +66,4 @@ Rooms and their images are written to disk. Attach a **volume** to the service s
 - `src/sync/` – the browser side of online rooms: sends local changes, applies remote ones.
 - `src/shared/` – code used by both sides: the message protocol and the card visibility rules.
 - `server/` – HTTP and WebSocket server: static files, room state, image uploads, persistence.
+- `server/library.ts` – the deck library, stored under `library/` in the data directory.

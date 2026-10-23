@@ -12,6 +12,7 @@ import { viewportCentre, zoomToFit } from './lib/view';
 import { boardData, useBoard } from './store';
 import { useUi } from './ui';
 import { NameDialog, OnlineDialog, RoomSettingsDialog } from './components/OnlineDialogs';
+import { LibraryDialog, SaveDeckDialog } from './components/LibraryDialogs';
 import { connectRoom, disconnectRoom } from './sync/client';
 import { loadRole, roomIdFromPath, useSession } from './sync/session';
 
@@ -157,6 +158,8 @@ export function App() {
       {dialog?.type === 'online' && <OnlineDialog onClose={close} />}
       {dialog?.type === 'room-settings' && <RoomSettingsDialog onClose={close} />}
       {dialog?.type === 'name' && <NameDialog onClose={close} />}
+      {dialog?.type === 'library' && <LibraryDialog onClose={close} />}
+      {dialog?.type === 'save-deck' && <SaveDeckDialog deckId={dialog.deckId} onClose={close} />}
     </div>
   );
 }

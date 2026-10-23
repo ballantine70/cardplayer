@@ -8,6 +8,8 @@ import type { ClientMessage } from '../src/shared/protocol.ts';
 import { ID_PATTERN } from '../src/shared/protocol.ts';
 import { RoomStore, type Connection } from './rooms.ts';
 import { Auth, loginPage, safeNext } from './auth.ts';
+import { Library } from './library.ts';
+import type { LibraryDeck } from '../src/shared/library.ts';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DATA_DIR = resolve(process.env.DATA_DIR ?? process.env.RAILWAY_VOLUME_MOUNT_PATH ?? 'data');
@@ -16,6 +18,27 @@ const MAX_ASSET_BYTES = 25 * 1024 * 1024;
 
 const store = new RoomStore(DATA_DIR);
 const auth = new Auth(process.env.SITE_PASSWORD, process.env.ADMIN_PASSWORD);
+const library = new Library(DATA_DIR);
+await library.load();
+
+/** Library decks for the given ids, or an error message. */
+function libraryDecks(ids: unknown): LibraryDeck[] | string {
+  if (ids === undefined) return [];
+  if (!Array.isArray(ids) || ids.length > 50) return 'Bad deck list';
+  const decks = ids.map((id) => library.get(String(id)));
+  return decks.every(Boolean) ? (decks as LibraryDeck[]) : 'A chosen deck is no longer in the library';
+}
+
+async function readJson(req: IncomingMessage, limit: number): Promise<Record<string, unknown> | null> {
+  const body = await readBody(req, limit);
+  if (!body) return null;
+  try {
+    const v = JSON.parse(body.toString() || '{}');
+    return v && typeof v === 'object' ? v : null;
+  } catch {
+    return null;
+  }
+}
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -51,16 +74,16 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, parts: strin
   // /api/health
   if (parts[0] === 'health') return json(res, 200, { ok: true });
 
-  // POST /api/rooms
+  if (parts[0] === 'library') return handleLibrary(req, res, parts.slice(1));
+
+  // POST /api/rooms {settings, deckIds}
   if (parts[0] === 'rooms' && parts.length === 1 && req.method === 'POST') {
-    const body = await readBody(req, 10_000);
-    let settings = {};
-    try {
-      settings = JSON.parse(body?.toString() || '{}').settings ?? {};
-    } catch {
-      return json(res, 400, { error: 'Invalid JSON' });
-    }
-    const room = await store.create(newId(), settings);
+    const body = await readJson(req, 100_000);
+    if (!body) return json(res, 400, { error: 'Invalid JSON' });
+    const decks = libraryDecks(body.deckIds);
+    if (typeof decks === 'string') return json(res, 400, { error: decks });
+    const room = await store.create(newId(), (body.settings ?? {}) as object);
+    if (decks.length) await room.addDecks(decks, (id) => library.assetPath(id), (id) => library.mime(id));
     return json(res, 201, { id: room.data.id });
   }
 
@@ -70,6 +93,15 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, parts: strin
 
   // GET /api/rooms/:id
   if (parts.length === 2 && req.method === 'GET') return json(res, 200, { id: room.data.id, settings: room.data.settings });
+
+  // POST /api/rooms/:id/decks {deckIds}
+  if (parts[2] === 'decks' && parts.length === 3 && req.method === 'POST') {
+    const body = await readJson(req, 100_000);
+    const decks = libraryDecks(body?.deckIds);
+    if (typeof decks === 'string' || !decks.length) return json(res, 400, { error: typeof decks === 'string' ? decks : 'No decks chosen' });
+    const ids = await room.addDecks(decks, (id) => library.assetPath(id), (id) => library.mime(id));
+    return json(res, 201, { ids });
+  }
 
   // PUT|GET /api/rooms/:id/assets/:assetId
   if (parts[2] === 'assets' && ID_PATTERN.test(parts[3] ?? '') && parts.length === 4) {
@@ -89,6 +121,62 @@ async function handleApi(req: IncomingMessage, res: ServerResponse, parts: strin
       if (!meta || !existsSync(file)) return json(res, 404, { error: 'No such asset' });
       res.writeHead(200, { 'content-type': meta.mime, 'cache-control': 'private, max-age=31536000, immutable' });
       return createReadStream(file).pipe(res);
+    }
+  }
+  return json(res, 404, { error: 'Not found' });
+}
+
+async function handleLibrary(req: IncomingMessage, res: ServerResponse, parts: string[]) {
+  // GET /api/library
+  if (parts.length === 0 && req.method === 'GET') return json(res, 200, { decks: library.list() });
+
+  // PUT|GET /api/library/assets/:id
+  if (parts[0] === 'assets' && parts.length === 2 && ID_PATTERN.test(parts[1])) {
+    const id = parts[1];
+    if (req.method === 'PUT') {
+      const mime = String(req.headers['content-type'] ?? '');
+      if (!mime.startsWith('image/')) return json(res, 415, { error: 'Images only' });
+      const body = await readBody(req, MAX_ASSET_BYTES);
+      if (!body) return json(res, 413, { error: 'Image too large' });
+      await library.putAsset(id, mime, body);
+      return json(res, 201, { ok: true });
+    }
+    if (req.method === 'GET') {
+      const mime = library.mime(id);
+      if (!mime || !existsSync(library.assetPath(id))) return json(res, 404, { error: 'No such image' });
+      res.writeHead(200, { 'content-type': mime, 'cache-control': 'private, max-age=31536000, immutable' });
+      return createReadStream(library.assetPath(id)).pipe(res);
+    }
+  }
+
+  // POST /api/library/decks
+  if (parts[0] === 'decks' && parts.length === 1 && req.method === 'POST') {
+    const body = await readJson(req, 5_000_000);
+    if (!body) return json(res, 400, { error: 'Invalid JSON' });
+    const result = await library.save(newId(), body);
+    return typeof result === 'string' ? json(res, 400, { error: result }) : json(res, 201, { id: result.id });
+  }
+
+  // GET|PUT|PATCH|DELETE /api/library/decks/:id
+  if (parts[0] === 'decks' && parts.length === 2 && ID_PATTERN.test(parts[1])) {
+    const id = parts[1];
+    const deck = library.get(id);
+    if (!deck) return json(res, 404, { error: 'No such deck' });
+    if (req.method === 'GET') return json(res, 200, deck);
+    if (req.method === 'PUT') {
+      const body = await readJson(req, 5_000_000);
+      if (!body) return json(res, 400, { error: 'Invalid JSON' });
+      const result = await library.save(id, body);
+      return typeof result === 'string' ? json(res, 400, { error: result }) : json(res, 200, { id });
+    }
+    if (req.method === 'PATCH') {
+      const body = await readJson(req, 10_000);
+      await library.rename(id, String(body?.name ?? ''));
+      return json(res, 200, { id });
+    }
+    if (req.method === 'DELETE') {
+      await library.remove(id);
+      return json(res, 200, { ok: true });
     }
   }
   return json(res, 404, { error: 'Not found' });
@@ -118,6 +206,8 @@ function serveStatic(req: IncomingMessage, res: ServerResponse, pathname: string
  */
 function needsAdmin(req: IncomingMessage, pathname: string) {
   if (pathname === '/api/rooms' && req.method === 'POST') return true;
+  if (/^\/api\/rooms\/[^/]+\/decks$/.test(pathname)) return true;
+  if (pathname === '/api/library' || pathname.startsWith('/api/library/')) return true;
   if (pathname.startsWith('/api/') || pathname.startsWith('/r/') || pathname.startsWith('/assets/')) return false;
   return true;
 }

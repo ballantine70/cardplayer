@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Asset, BoardData, BoardItem, Camera, Card, CardItem, DeckItem, ImageItem, TextItem } from './types';
 import { DEFAULT_CARD, findFreeSpot, itemBounds, unionRects } from './lib/geometry';
 import { planDeal, shuffle } from './lib/deckOps';
+import { libraryAssetUrl, type LibraryDeck } from './shared/library';
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
@@ -62,7 +63,9 @@ interface Actions {
   resizeImage(id: string, w: number, h: number): void;
   deleteItems(ids: string[]): void;
   updateCard(id: string, patch: Partial<Pick<Card, 'name' | 'value' | 'description'>>): void;
-  updateItem(id: string, patch: Partial<Pick<DeckItem, 'name'>> | Partial<Pick<TextItem, 'text'>>): void;
+  updateItem(id: string, patch: Partial<Pick<DeckItem, 'name' | 'libraryId'>> | Partial<Pick<TextItem, 'text'>>): void;
+  /** Put a copy of a library deck on the board, face down, near `at`; returns the deck's id. */
+  placeLibraryDeck(deck: LibraryDeck, at: { x: number; y: number }): string;
   createDeck(deck: NewDeck): string;
   shuffleDeck(id: string): void;
   flip(ids: string[]): void;
@@ -266,6 +269,44 @@ export const useBoard = create<Store>()((set, get) => ({
       cardHeight: nd.cards[0]?.height,
     };
     set({ items, ...collectGarbage({ items, cards, assets }), selection: [deckId] });
+    return deckId;
+  },
+
+  placeLibraryDeck(lib, at) {
+    const s = get();
+    const assets = { ...s.assets };
+    const cards = { ...s.cards };
+    const items = { ...s.items };
+    for (const a of Object.values(lib.assets)) assets[a.id] ??= { ...a, src: libraryAssetUrl(a.id) };
+    const deckId = uid();
+    const cardIds = lib.cards
+      .map((c) => {
+        const id = uid();
+        cards[id] = { id, ...c, homeDeckId: deckId };
+        return id;
+      })
+      .reverse();
+    const w = lib.cards[0]?.width ?? DEFAULT_CARD.w;
+    const h = lib.cards[0]?.height ?? DEFAULT_CARD.h;
+    const spot = findFreeSpot(
+      { x: at.x - w / 2, y: at.y - h / 2, w, h },
+      Object.values(items).filter(onTable).map((it) => itemBounds(it, cards)),
+      60,
+    );
+    items[deckId] = {
+      kind: 'deck',
+      id: deckId,
+      name: lib.name,
+      x: spot.x,
+      y: spot.y,
+      z: maxZ(items) + 1,
+      cardIds,
+      faceUp: false,
+      cardWidth: w,
+      cardHeight: h,
+      libraryId: lib.id,
+    };
+    set({ assets, cards, items, selection: [deckId] });
     return deckId;
   },
 

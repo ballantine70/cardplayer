@@ -5,6 +5,7 @@ import { useBoard } from '../store';
 import { sendIdentity, sendSettings } from '../sync/client';
 import { PLAYER_COLOURS, saveIdentity, useSession } from '../sync/session';
 import { Modal } from './Modal';
+import { DeckPicker } from './LibraryDialogs';
 
 function SettingsFields({ value, onChange }: { value: RoomSettings; onChange: (s: RoomSettings) => void }) {
   return (
@@ -32,7 +33,8 @@ function SettingsFields({ value, onChange }: { value: RoomSettings; onChange: (s
 export function OnlineDialog({ onClose }: { onClose: () => void }) {
   const [settings, setSettings] = useState<RoomSettings>(DEFAULT_SETTINGS);
   const hasBoard = useBoard((s) => Object.keys(s.items).length > 0);
-  const [bring, setBring] = useState(hasBoard);
+  const [bring, setBring] = useState(false);
+  const [deckIds, setDeckIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,7 +45,7 @@ export function OnlineDialog({ onClose }: { onClose: () => void }) {
       const res = await fetch('/api/rooms', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ settings }),
+        body: JSON.stringify({ settings, deckIds }),
       });
       if (!res.ok) throw new Error(`The server said ${res.status}.`);
       const { id } = (await res.json()) as { id: string };
@@ -59,9 +61,16 @@ export function OnlineDialog({ onClose }: { onClose: () => void }) {
       <div className="form">
         <p className="muted">Creates a room with its own link. Anyone with the link can join and play on the same board.</p>
         <SettingsFields value={settings} onChange={setSettings} />
+        <fieldset>
+          <legend>Decks from the library</legend>
+          <DeckPicker chosen={deckIds} onChange={setDeckIds} />
+        </fieldset>
         <label className="check">
           <input type="checkbox" checked={bring} disabled={!hasBoard} onChange={(e) => setBring(e.target.checked)} />
-          Copy this board into the room
+          <span>
+            Also copy everything on this board
+            <small className="muted block">Includes decks not saved to the library.</small>
+          </span>
         </label>
       </div>
       <footer>

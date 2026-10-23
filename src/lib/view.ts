@@ -21,9 +21,14 @@ export function zoomBy(factor: number) {
 export function zoomToFit() {
   const s = useBoard.getState();
   const b = unionRects(Object.values(s.items).map((it) => itemBounds(it, s.cards)));
-  const { w, h } = boardSize();
+  const size = boardSize();
+  // Keep clear of the hand tray docked along the bottom of a table.
+  const tray = document.querySelector('.hand-tray')?.clientHeight ?? 0;
+  const w = size.w;
+  const h = size.h - (tray ? tray + 12 : 0);
   if (!b) return s.setCamera({ x: w / 2, y: h / 2, zoom: 1 });
+  // Extra room below for deck labels.
   const margin = 80;
-  const zoom = Math.min(1, Math.max(0.05, Math.min((w - margin * 2) / b.w, (h - margin * 2) / b.h)));
-  s.setCamera({ zoom, x: w / 2 - (b.x + b.w / 2) * zoom, y: h / 2 - (b.y + b.h / 2) * zoom });
+  const zoom = Math.min(1, Math.max(0.05, Math.min((w - margin * 2) / b.w, (h - margin * 2) / (b.h + 60))));
+  s.setCamera({ zoom, x: w / 2 - (b.x + b.w / 2) * zoom, y: h / 2 - (b.y + (b.h + 60) / 2) * zoom });
 }

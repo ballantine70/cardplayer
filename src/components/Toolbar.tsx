@@ -72,6 +72,7 @@ export function Toolbar({ onImages }: { onImages: (files: File[]) => void }) {
           >
             {copied ? 'Link copied' : 'Copy invite link'}
           </button>
+          {admin && <button onClick={() => useUi.getState().openDialog({ type: 'library' })}>Add deck</button>}
           <button onClick={() => useUi.getState().openDialog({ type: 'room-settings' })}>Room settings</button>
           {admin && (
             <a className="button" href="/" title="Back to the admin board">
@@ -84,6 +85,7 @@ export function Toolbar({ onImages }: { onImages: (files: File[]) => void }) {
         </div>
       ) : (
         <div className="group">
+          <button onClick={() => useUi.getState().openDialog({ type: 'library' })}>Library</button>
           <button className="primary" onClick={() => useUi.getState().openDialog({ type: 'online' })}>
             Play online
           </button>

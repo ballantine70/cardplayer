@@ -6,7 +6,9 @@ export type Dialog =
   | { type: 'help' }
   | { type: 'online' }
   | { type: 'room-settings' }
-  | { type: 'name' };
+  | { type: 'name' }
+  | { type: 'library' }
+  | { type: 'save-deck'; deckId: string };
 
 interface Ui {
   dialog: Dialog | null;

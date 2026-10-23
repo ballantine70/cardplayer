@@ -1,8 +1,10 @@
-import { mkdir, readFile, rename, writeFile, rm } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rename, writeFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { WebSocket } from 'ws';
-import type { BoardItem, Card, Player, RoomSettings } from '../src/types.ts';
+import { randomBytes } from 'node:crypto';
+import type { BoardItem, Card, DeckItem, Player, RoomSettings } from '../src/types.ts';
+import type { LibraryDeck } from '../src/shared/library.ts';
 import type { AssetMeta, ItemChange, Patch, ServerMessage } from '../src/shared/protocol.ts';
 import { DEFAULT_SETTINGS } from '../src/shared/protocol.ts';
 import { redactCard, visibleCardIds } from '../src/shared/visibility.ts';
@@ -241,6 +243,48 @@ export class Room {
     }
   }
 
+  /**
+   * Put copies of library decks on the table, face down, in a row to the right
+   * of everything already there. `assetPath` locates each library image.
+   */
+  async addDecks(decks: LibraryDeck[], assetPath: (id: string) => string, mimeOf: (id: string) => string | undefined) {
+    const d = this.data;
+    await mkdir(this.assetDir, { recursive: true });
+    const onTable = Object.values(d.items).filter((it) => !(it.kind === 'card' && it.holder));
+    const gap = 160;
+    let x = onTable.length ? Math.max(...onTable.map((it) => it.x + approxWidth(it))) + gap : 0;
+    const y = onTable.length ? Math.min(...onTable.map((it) => it.y)) : 0;
+    let z = Object.values(d.items).reduce((m, it) => Math.max(m, it.z), 0);
+    const changes: Record<string, ItemChange> = {};
+    for (const deck of decks) {
+      for (const a of Object.values(deck.assets)) {
+        if (d.assets[a.id]) continue;
+        await copyFile(assetPath(a.id), join(this.assetDir, a.id));
+        d.assets[a.id] = { ...a, mime: mimeOf(a.id) ?? 'image/png' };
+      }
+      const deckId = newId();
+      const cardIds = deck.cards
+        .map((c) => {
+          const id = newId();
+          d.cards[id] = { id, ...c, homeDeckId: deckId };
+          return id;
+        })
+        // Library decks list the top card first; decks on the table keep it last.
+        .reverse();
+      const w = deck.cards[0]?.width ?? 250;
+      const h = deck.cards[0]?.height ?? 350;
+      const item: DeckItem = { kind: 'deck', id: deckId, name: deck.name, x, y, z: ++z, cardIds, faceUp: false, cardWidth: w, cardHeight: h };
+      d.items[deckId] = item;
+      d.revs[deckId] = 1;
+      changes[deckId] = { item, rev: 1 };
+      x += w + gap;
+    }
+    this.broadcast({ type: 'patch', items: changes });
+    this.syncViews();
+    this.scheduleSave();
+    return Object.keys(changes);
+  }
+
   send(conn: Connection, msg: ServerMessage) {
     if (conn.socket.readyState === conn.socket.OPEN) conn.socket.send(JSON.stringify(msg));
   }
@@ -263,6 +307,21 @@ export class Room {
     const file = join(dir, `${this.data.id}.json`);
     await writeFile(`${file}.tmp`, JSON.stringify(this.data));
     await rename(`${file}.tmp`, file);
+  }
+}
+
+const newId = () => randomBytes(8).toString('hex').slice(0, 12);
+
+function approxWidth(it: BoardItem) {
+  switch (it.kind) {
+    case 'deck':
+      return it.cardWidth ?? 250;
+    case 'image':
+      return it.w;
+    case 'card':
+      return 250;
+    case 'text':
+      return 220;
   }
 }
 
