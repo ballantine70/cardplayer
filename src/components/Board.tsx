@@ -321,7 +321,7 @@ export function Board() {
             <p>Nothing on the table yet. Decks are added from the admin board.</p>
           ) : (
             <>
-              <p>Paste, drop or load images to start.</p>
+              <p>Paste, drop or load images or PDFs to start.</p>
               <p>Select a group of images, then choose “Build deck”.</p>
             </>
           )}

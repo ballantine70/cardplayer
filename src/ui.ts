@@ -15,6 +15,9 @@ interface Ui {
   editingTextId: string | null;
   /** Whether the details panel is shown. */
   detailsOpen: boolean;
+  /** A short status message, such as import progress or an error. */
+  notice: { text: string; error?: boolean } | null;
+  setNotice(notice: Ui['notice']): void;
   openDialog(d: Dialog | null): void;
   setEditingText(id: string | null): void;
   toggleDetails(open?: boolean): void;
@@ -34,6 +37,8 @@ export const useUi = create<Ui>()((set, get) => ({
   dialog: null,
   editingTextId: null,
   detailsOpen: storedDetails(),
+  notice: null,
+  setNotice: (notice) => set({ notice }),
   openDialog: (dialog) => set({ dialog }),
   setEditingText: (editingTextId) => set({ editingTextId }),
   toggleDetails(open = !get().detailsOpen) {

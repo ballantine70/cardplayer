@@ -857,3 +857,21 @@ small.block {
     flex-wrap: wrap;
   }
 }
+
+.notice-toast {
+  position: fixed;
+  left: 50%;
+  top: 60px;
+  translate: -50% 0;
+  max-width: calc(100% - 32px);
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: var(--bg);
+  box-shadow: 0 4px 14px #0003;
+  z-index: 200;
+}
+.notice-toast.error-toast {
+  background: var(--danger);
+  color: #fff;
+}

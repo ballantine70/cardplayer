@@ -6,6 +6,7 @@ import { HelpDialog } from './components/HelpDialog';
 import { Inspector } from './components/Inspector';
 import { Toolbar } from './components/Toolbar';
 import { readImageFile } from './lib/cardRender';
+import { isPdf, pdfToImages } from './lib/pdfImport';
 import { screenToWorld } from './lib/geometry';
 import { loadSavedBoard, saveBoard } from './lib/persist';
 import { viewportCentre, zoomToFit } from './lib/view';
@@ -16,12 +17,37 @@ import { LibraryDialog, SaveDeckDialog } from './components/LibraryDialogs';
 import { connectRoom, disconnectRoom } from './sync/client';
 import { loadRole, roomIdFromPath, useSession } from './sync/session';
 
+/** PDFs with more pages than this ask before importing. */
+const LARGE_PDF_PAGES = 150;
+
 async function addFiles(files: File[], at?: { x: number; y: number }) {
   const images = files.filter((f) => f.type.startsWith('image/'));
-  if (images.length === 0) return;
-  const loaded = await Promise.all(images.map((f) => readImageFile(f).catch(() => null)));
-  const ok = loaded.filter((x) => x !== null);
-  if (ok.length) useBoard.getState().addImages(ok, at ?? viewportCentre());
+  const pdfs = files.filter(isPdf);
+  if (images.length === 0 && pdfs.length === 0) return;
+  const { setNotice } = useUi.getState();
+  const loaded = (await Promise.all(images.map((f) => readImageFile(f).catch(() => null)))).filter((x) => x !== null);
+  for (const pdf of pdfs) {
+    try {
+      let asked = false;
+      const pages = await pdfToImages(pdf, (done, total) => {
+        if (!asked && total > LARGE_PDF_PAGES) {
+          asked = true;
+          if (!confirm(`${pdf.name} has ${total} pages. Import them all?`)) throw new Error('cancelled');
+        }
+        setNotice({ text: `Importing ${pdf.name}: page ${done} of ${total}` });
+      });
+      loaded.push(...pages);
+    } catch (e) {
+      if ((e as Error).message !== 'cancelled') {
+        console.error(`PDF import failed for ${pdf.name}`, e);
+        setNotice({ text: `Could not read ${pdf.name}. Is it a valid, unprotected PDF?`, error: true });
+        setTimeout(() => useUi.getState().notice?.error && setNotice(null), 6000);
+        continue;
+      }
+    }
+    setNotice(null);
+  }
+  if (loaded.length) useBoard.getState().addImages(loaded, at ?? viewportCentre());
 }
 
 /** Read once: React may run effects twice in development, and the flag is removed from the URL. */
@@ -56,6 +82,7 @@ function startLocal(onReady: () => void) {
 
 export function App() {
   const dialog = useUi((u) => u.dialog);
+  const notice = useUi((u) => u.notice);
   const openDialog = useUi((u) => u.openDialog);
   const [loaded, setLoaded] = useState(false);
 
@@ -154,6 +181,11 @@ export function App() {
         )}
         <Inspector />
       </main>
+      {notice && (
+        <div className={notice.error ? 'notice-toast error-toast' : 'notice-toast'} role="status">
+          {notice.text}
+        </div>
+      )}
       {dialog?.type === 'build' && <BuildDeckDialog itemIds={dialog.itemIds} onClose={close} />}
       {dialog?.type === 'deal' && <DealDialog deckId={dialog.deckId} onClose={close} />}
       {dialog?.type === 'help' && <HelpDialog onClose={close} />}

@@ -5,7 +5,7 @@ const rows: [string, string][] = [
   ['Pan', 'Scroll, or drag with space held / middle mouse button'],
   ['Zoom', 'Ctrl/⌘ + scroll, or pinch on a trackpad'],
   ['Select', 'Click, Shift-click, or drag a box on empty space'],
-  ['Add images', 'Paste, drop files onto the board, or “Add images”'],
+  ['Add images', 'Paste, drop files onto the board, or “Add images”. Each page of a PDF becomes an image'],
   ['Build a deck', 'Select images, then “Build deck”'],
   ['Draw a card', 'Double-click a deck, press D, or Alt-drag the deck'],
   ['Return a card', 'Drag it onto a deck'],

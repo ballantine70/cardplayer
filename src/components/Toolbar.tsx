@@ -25,7 +25,7 @@ export function Toolbar({ onImages }: { onImages: (files: File[]) => void }) {
         <input
           ref={fileInput}
           type="file"
-          accept="image/*"
+          accept="image/*,application/pdf,.pdf"
           multiple
           hidden
           onChange={(e) => {

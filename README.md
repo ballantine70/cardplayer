@@ -17,7 +17,7 @@ Node 22.18 or later is required: the server is TypeScript run directly by Node.
 
 ## Using it
 
-- **Add images** by pasting, dropping files onto the board, or with *Add images*.
+- **Add images** by pasting, dropping files onto the board, or with *Add images*. PDFs are accepted too: each page becomes an image, named after the file and page number.
 - **Build a deck**: select images (click, Shift-click or drag a box) and choose *Build deck*.
   - *Use images as cards* – for images that are already card-shaped and the same size; picked automatically when they are.
   - *Place images on poker cards* – each image is fitted onto a 2.5 × 3.5 in card, with a choice of card colour, margin and optional rotation of landscape images.

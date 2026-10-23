@@ -50,6 +50,12 @@ const MIME: Record<string, string> = {
   '.ico': 'image/x-icon',
   '.json': 'application/json',
   '.woff2': 'font/woff2',
+  '.mjs': 'text/javascript',
+  '.wasm': 'application/wasm',
+  '.bcmap': 'application/octet-stream',
+  '.pfb': 'application/octet-stream',
+  '.ttf': 'font/ttf',
+  '.icc': 'application/vnd.iccprofile',
 };
 
 const newId = () => randomBytes(8).toString('hex').slice(0, 10);
@@ -191,7 +197,7 @@ function serveStatic(req: IncomingMessage, res: ServerResponse, pathname: string
     res.writeHead(404).end('Run `npm run build` first.');
     return;
   }
-  const hashed = pathname.startsWith('/assets/');
+  const hashed = pathname.startsWith('/assets/') || pathname.startsWith('/pdfjs/');
   res.writeHead(200, {
     'content-type': MIME[extname(file)] ?? 'application/octet-stream',
     'cache-control': hashed ? 'public, max-age=31536000, immutable' : 'no-cache',
@@ -208,7 +214,8 @@ function needsAdmin(req: IncomingMessage, pathname: string) {
   if (pathname === '/api/rooms' && req.method === 'POST') return true;
   if (/^\/api\/rooms\/[^/]+\/decks$/.test(pathname)) return true;
   if (pathname === '/api/library' || pathname.startsWith('/api/library/')) return true;
-  if (pathname.startsWith('/api/') || pathname.startsWith('/r/') || pathname.startsWith('/assets/')) return false;
+  if (pathname.startsWith('/api/') || pathname.startsWith('/r/') || pathname.startsWith('/assets/') || pathname.startsWith('/pdfjs/'))
+    return false;
   return true;
 }
 
