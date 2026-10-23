@@ -17,11 +17,12 @@ Node 22.18 or later is required: the server is TypeScript run directly by Node.
 
 ## Using it
 
-- **Add images** by pasting, dropping files onto the board, or with *Add images*. PDFs are accepted too: each page becomes an image, named after the file and page number.
+- **Add images** by pasting, dropping files onto the board, or with *Add images*. PDFs are accepted too: each page becomes an image, named after the page's title (its largest text) or, failing that, the file and page number.
 - **Build a deck**: select images (click, Shift-click or drag a box) and choose *Build deck*.
   - *Use images as cards* – for images that are already card-shaped and the same size; picked automatically when they are.
   - *Place images on poker cards* – each image is fitted onto a 2.5 × 3.5 in card, with a choice of card colour, margin and optional rotation of landscape images.
-  - The back is either generated (pattern and two colours) or taken from any image on the board.
+  - By default every card shares one back: generated (pattern and two colours) or taken from any image on the board.
+  - For double-sided cards, choose *Each card has its own back*: the selected images are paired either alternately (front, back, front, back…, as in a double-sided PDF) or as all the fronts followed by all the backs. A card left without a pair gets the generated back.
   - Each card gets a name, value and description, editable in the dialog and later in the side panel.
 - **Play**: select a deck for *Shuffle*, *Draw*, *Deal…* (players, cards each, face up/down), *Flip*, *Spread* and *Gather*. Drag a card onto a deck to put it back on top; Alt-drag a deck to pull its top card off; double-click a card to flip it. *Stack into deck* combines selected cards.
 - **Navigate**: scroll to pan, Ctrl/⌘ + scroll or pinch to zoom, Space-drag or middle-drag to pan. Press `?` in the toolbar for the full list.
@@ -43,7 +44,7 @@ Each room has two settings, changeable at any time under *Room settings*:
 - **Private hands** – only a hand's holder sees its cards. Off means hands are open, and anyone can look at another player's hand from the players panel.
 - **Hide face-down cards** – nobody can see face-down cards on the table or the order of a deck. Turn it off while building or checking decks.
 
-Hidden cards are withheld by the server, not just hidden in the page: players are only sent a card's face and details when they are allowed to see it. One limit: card identities are stable, so a player who has seen a card and watches its id in developer tools could follow it into a deck.
+Hidden cards are withheld by the server, not just hidden in the page: players are only sent a card's face and details when they are allowed to see it, and only sent a card's back when it could be seen on the table (the top of a deck, or a loose face-down card), since double-sided decks have a different back on every card. One limit: card identities are stable, so a player who has seen a card and watches its id in developer tools could follow it into a deck.
 
 Simultaneous moves are resolved per object: each change carries the revision it was based on, and the server refuses changes based on an out-of-date revision and sends back the current state.
 

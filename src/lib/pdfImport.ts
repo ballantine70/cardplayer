@@ -38,11 +38,12 @@ export async function pdfToImages(file: File, onPage?: (done: number, total: num
       canvas.width = Math.round(viewport.width);
       canvas.height = Math.round(viewport.height);
       await page.render({ canvas, viewport }).promise;
+      const title = await pageTitle(page).catch(() => '');
       out.push({
         src: canvas.toDataURL('image/jpeg', 0.9),
         width: canvas.width,
         height: canvas.height,
-        name: doc.numPages > 1 ? `${base} p${n}` : base,
+        name: title || (doc.numPages > 1 ? `${base} p${n}` : base),
       });
       page.cleanup();
       onPage?.(n, doc.numPages);
@@ -51,4 +52,32 @@ export async function pdfToImages(file: File, onPage?: (done: number, total: num
     await task.destroy();
   }
   return out;
+}
+
+interface TextRun {
+  str: string;
+  height: number;
+}
+
+/**
+ * A page's title: its largest text, in reading order. Card PDFs usually head
+ * each card with its name. Empty for pages without text, such as scans.
+ */
+async function pageTitle(page: { getTextContent(): Promise<{ items: unknown[] }> }): Promise<string> {
+  const runs = (await page.getTextContent()).items.filter(
+    (it): it is TextRun => typeof (it as TextRun).str === 'string' && (it as TextRun).str.trim() !== '',
+  );
+  return titleFromRuns(runs);
+}
+
+export function titleFromRuns(runs: TextRun[]): string {
+  if (runs.length === 0) return '';
+  const largest = Math.max(...runs.map((r) => r.height));
+  const title = runs
+    .filter((r) => r.height >= largest * 0.9)
+    .map((r) => r.str.trim())
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return title.length > 60 ? `${title.slice(0, 57)}…` : title;
 }

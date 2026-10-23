@@ -9,6 +9,8 @@ export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().to
 /** A card prepared for a new deck, before ids are assigned. */
 export interface NewCard {
   face: Omit<Asset, 'id'>;
+  /** This card's own back; without it the deck's shared back is used. */
+  back?: Omit<Asset, 'id'>;
   width: number;
   height: number;
   name: string;
@@ -240,11 +242,16 @@ export const useBoard = create<Store>()((set, get) => ({
     const cardIds = nd.cards.map((nc) => {
       const faceId = uid();
       assets[faceId] = { ...nc.face, id: faceId };
+      let cardBackId = backId;
+      if (nc.back) {
+        cardBackId = uid();
+        assets[cardBackId] = { ...nc.back, id: cardBackId };
+      }
       const id = uid();
       cards[id] = {
         id,
         faceAssetId: faceId,
-        backAssetId: backId,
+        backAssetId: cardBackId,
         width: nc.width,
         height: nc.height,
         name: nc.name,
@@ -255,13 +262,21 @@ export const useBoard = create<Store>()((set, get) => ({
       return id;
     });
     nd.removeItemIds.forEach((id) => delete items[id]);
+    // Start where the source images were, but keep clear of anything left there.
+    const w = nd.cards[0]?.width ?? DEFAULT_CARD.w;
+    const h = nd.cards[0]?.height ?? DEFAULT_CARD.h;
+    const spot = findFreeSpot(
+      { x: nd.x, y: nd.y, w, h },
+      Object.values(items).filter(onTable).map((it) => itemBounds(it, cards)),
+      40,
+    );
     // The first card in the dialog ends up on top of the deck.
     items[deckId] = {
       kind: 'deck',
       id: deckId,
       name: nd.name,
-      x: nd.x,
-      y: nd.y,
+      x: spot.x,
+      y: spot.y,
       z: maxZ(items) + 1,
       cardIds: cardIds.reverse(),
       faceUp: false,

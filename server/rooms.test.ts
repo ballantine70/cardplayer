@@ -66,6 +66,35 @@ describe('Room', () => {
     expect(seen.c1?.faceAssetId).toBe('');
   });
 
+  it('only sends the backs a player could see', () => {
+    const room = makeRoom();
+    const a = fakeConn('alice');
+    const b = fakeConn('bob', false);
+    room.join(a.conn, 'Alice', '#2f5d8a');
+    room.join(b.conn, 'Bob', '#b3261e');
+    // Each card has its own back; c2 is on top.
+    room.applyPatch(a.conn, {
+      items: { deck1: { item: deck(['c1', 'c2']), rev: 0 } },
+      cards: { c1: { ...card('c1', 'Ace'), backAssetId: 'back1' }, c2: { ...card('c2', 'King'), backAssetId: 'back2' } },
+    });
+    let seen = cardsSeen(b.inbox);
+    expect(seen.c2?.backAssetId).toBe('back2');
+    expect(seen.c1?.backAssetId).toBe('');
+
+    // Drawing the top card face down reveals the next card's back, not its face.
+    const drawn: CardItem = { kind: 'card', id: 'i1', cardId: 'c2', x: 0, y: 0, z: 2, faceUp: false };
+    room.applyPatch(a.conn, { items: { deck1: { item: deck(['c1']), rev: 1 }, i1: { item: drawn, rev: 0 } } });
+    seen = cardsSeen(b.inbox);
+    expect(seen.c1?.backAssetId).toBe('back1');
+    expect(seen.c1?.name).toBe('');
+    expect(seen.c2?.backAssetId).toBe('back2');
+
+    // A card in someone else's private hand shows nothing at all.
+    const held: CardItem = { ...drawn, holder: 'alice' };
+    room.applyPatch(a.conn, { items: { i1: { item: held, rev: 1 } } });
+    expect(cardsSeen(b.inbox).c2?.backAssetId).toBe('');
+  });
+
   it('shows everything when face-down cards are not hidden', () => {
     const { b } = setup({ privateHands: true, hideFaceDown: false });
     expect(cardsSeen(b.inbox).c2?.name).toBe('King');

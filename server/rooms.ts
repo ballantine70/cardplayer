@@ -7,7 +7,7 @@ import type { BoardItem, Card, DeckItem, Player, RoomSettings } from '../src/typ
 import type { LibraryDeck } from '../src/shared/library.ts';
 import type { AssetMeta, ItemChange, Patch, ServerMessage } from '../src/shared/protocol.ts';
 import { DEFAULT_SETTINGS } from '../src/shared/protocol.ts';
-import { redactCard, visibleCardIds } from '../src/shared/visibility.ts';
+import { cardSight, redactCard, visibleCardIds } from '../src/shared/visibility.ts';
 
 export interface RoomData {
   id: string;
@@ -31,10 +31,12 @@ export interface Connection {
 }
 
 /** Redacted copies, cached so unchanged hidden cards compare equal by reference. */
-const redacted = new WeakMap<Card, Card>();
-const redact = (c: Card) => {
-  let r = redacted.get(c);
-  if (!r) redacted.set(c, (r = redactCard(c)));
+const backOnly = new WeakMap<Card, Card>();
+const nothing = new WeakMap<Card, Card>();
+const redact = (c: Card, keepBack: boolean) => {
+  const cache = keepBack ? backOnly : nothing;
+  let r = cache.get(c);
+  if (!r) cache.set(c, (r = redactCard(c, keepBack)));
   return r;
 };
 
@@ -185,7 +187,7 @@ export class Room {
 
   private viewChanges(conn: Connection): Patch {
     const d = this.data;
-    const visible = visibleCardIds(d.items, d.settings, conn.playerId);
+    const sight = cardSight(d.items, d.settings, conn.playerId);
     const cards: Record<string, Card | null> = {};
     const assets: Record<string, AssetMeta> = {};
     const needAsset = (id: string) => {
@@ -196,12 +198,13 @@ export class Room {
       }
     };
     for (const card of Object.values(d.cards)) {
-      const v = visible.has(card.id) ? card : redact(card);
+      const s = sight.get(card.id);
+      const v = s === 'face' ? card : redact(card, s === 'back');
       if (conn.sentCards.get(card.id) !== v) {
         cards[card.id] = v;
         conn.sentCards.set(card.id, v);
       }
-      needAsset(card.backAssetId);
+      if (v.backAssetId) needAsset(v.backAssetId);
       if (v.faceAssetId) needAsset(v.faceAssetId);
     }
     for (const id of conn.sentCards.keys()) {

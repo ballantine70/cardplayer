@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Asset, ImageItem } from '../types';
 import { DEFAULT_CARD, itemBounds, unionRects } from '../lib/geometry';
-import { fileBaseName, isUniform, readingOrder } from '../lib/deckOps';
+import { fileBaseName, isUniform, pairFrontsAndBacks, readingOrder, type PairOrder } from '../lib/deckOps';
 import { renderCoverBack, renderFace, renderGeneratedBack, type BackPattern } from '../lib/cardRender';
 import { useBoard, type NewCard } from '../store';
 import { Modal } from './Modal';
@@ -14,6 +14,8 @@ interface Row {
 }
 
 type Mode = 'uniform' | 'irregular';
+/** One back for every card (generated or a board image), or a back image per card. */
+type BackSource = 'generated' | 'image' | 'paired';
 
 export function BuildDeckDialog({ itemIds, onClose }: { itemIds: string[]; onClose: () => void }) {
   const items = useBoard((s) => s.items);
@@ -34,7 +36,8 @@ export function BuildDeckDialog({ itemIds, onClose }: { itemIds: string[]; onClo
   const [background, setBackground] = useState('#ffffff');
   const [padding, setPadding] = useState(0.08);
   const [allowRotate, setAllowRotate] = useState(false);
-  const [backSource, setBackSource] = useState<'generated' | 'image'>('generated');
+  const [backSource, setBackSource] = useState<BackSource>('generated');
+  const [pairOrder, setPairOrder] = useState<PairOrder>('alternate');
   const [pattern, setPattern] = useState<BackPattern>('lattice');
   const [primary, setPrimary] = useState('#7a1f2b');
   const [secondary, setSecondary] = useState('#e8c872');
@@ -46,13 +49,24 @@ export function BuildDeckDialog({ itemIds, onClose }: { itemIds: string[]; onClo
     sources.map((it, i) => ({
       itemId: it.id,
       name: fileBaseName(assetOf(it).name) || `Card ${i + 1}`,
-      value: String(i + 1),
+      value: '',
       description: '',
     })),
   );
 
-  // An image chosen as the back is not also used as a face.
-  const faceRows = rows.filter((r) => !(backSource === 'image' && r.itemId === backItemId));
+  // Each card is a front row plus, with paired backs, the image used as its back.
+  // An image chosen as the shared back is not also used as a face.
+  const pairs = useMemo(
+    () =>
+      backSource === 'paired'
+        ? pairFrontsAndBacks(rows, pairOrder).map((p) => ({ front: p.front, backItemId: p.back?.itemId ?? null }))
+        : rows.filter((r) => !(backSource === 'image' && r.itemId === backItemId)).map((front) => ({ front, backItemId: null })),
+    [rows, backSource, pairOrder, backItemId],
+  );
+  const faceRows = pairs.map((p) => p.front);
+  const unpaired = backSource === 'paired' ? pairs.filter((p) => !p.backItemId).length : 0;
+  // The generated back is used for every card, or for paired cards that lack a back image.
+  const needsGenerated = backSource === 'generated' || unpaired > 0;
 
   const size = useMemo(() => {
     if (mode === 'irregular' || faceRows.length === 0) return DEFAULT_CARD;
@@ -62,19 +76,31 @@ export function BuildDeckDialog({ itemIds, onClose }: { itemIds: string[]; onClo
 
   const [backPreview, setBackPreview] = useState<string>('');
   const [facePreview, setFacePreview] = useState<string>('');
+  const generatedBack = useMemo(
+    () => renderGeneratedBack(size.w, size.h, { pattern, primary, secondary, label: name }),
+    [pattern, primary, secondary, name, size.w, size.h],
+  );
 
+  /** A board image as it will appear on a card: as it is, or fitted onto a card. */
+  const asCardImage = (src: string) =>
+    mode === 'uniform' ? Promise.resolve(src) : renderFace(src, size.w, size.h, { background, padding, allowRotate });
+
+  const firstPairBack = backSource === 'paired' ? pairs[0]?.backItemId ?? null : null;
   useEffect(() => {
     let live = true;
     const backItem = backItemId ? items[backItemId] : null;
+    const pairBack = firstPairBack ? items[firstPairBack] : null;
     if (backSource === 'image' && backItem?.kind === 'image') {
       renderCoverBack(assetOf(backItem).src, size.w, size.h).then((s) => live && setBackPreview(s));
+    } else if (pairBack?.kind === 'image') {
+      asCardImage(assetOf(pairBack).src).then((s) => live && setBackPreview(s));
     } else {
-      setBackPreview(renderGeneratedBack(size.w, size.h, { pattern, primary, secondary, label: name }));
+      setBackPreview(generatedBack);
     }
     return () => {
       live = false;
     };
-  }, [backSource, backItemId, pattern, primary, secondary, name, size.w, size.h]);
+  }, [backSource, backItemId, firstPairBack, generatedBack, mode, background, padding, allowRotate, size.w, size.h]);
 
   const firstFace = faceRows[0] ? (items[faceRows[0].itemId] as ImageItem) : null;
   useEffect(() => {
@@ -88,7 +114,7 @@ export function BuildDeckDialog({ itemIds, onClose }: { itemIds: string[]; onClo
     };
   }, [firstFace?.id, mode, background, padding, allowRotate, size.w, size.h]);
 
-  const setRow = (i: number, patch: Partial<Row>) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+  const setRow = (itemId: string, patch: Partial<Row>) => setRows((rs) => rs.map((r) => (r.itemId === itemId ? { ...r, ...patch } : r)));
 
   async function build() {
     if (faceRows.length === 0) return;
@@ -96,7 +122,7 @@ export function BuildDeckDialog({ itemIds, onClose }: { itemIds: string[]; onClo
     setError(null);
     try {
       const cards: NewCard[] = [];
-      for (const r of faceRows) {
+      for (const { front: r, backItemId: pairBackId } of pairs) {
         const a = assetOf(items[r.itemId] as ImageItem);
         const face =
           mode === 'uniform'
@@ -107,16 +133,29 @@ export function BuildDeckDialog({ itemIds, onClose }: { itemIds: string[]; onClo
                 height: size.h * 2,
                 name: a.name,
               };
-        cards.push({ face, width: size.w, height: size.h, name: r.name, value: r.value, description: r.description });
+        let back: NewCard['back'];
+        if (pairBackId) {
+          const b = assetOf(items[pairBackId] as ImageItem);
+          back =
+            mode === 'uniform'
+              ? { src: b.src, width: b.width, height: b.height, name: b.name }
+              : { src: await asCardImage(b.src), width: size.w * 2, height: size.h * 2, name: b.name };
+        }
+        cards.push({ face, back, width: size.w, height: size.h, name: r.name, value: r.value, description: r.description });
       }
       const at = unionRects(sources.map((it) => itemBounds(it, {})))!;
       createDeck({
         name,
         cards,
-        back: { src: backPreview, width: size.w * 2, height: size.h * 2, name: `${name} back` },
+        back: {
+          src: backSource === 'image' ? backPreview : generatedBack,
+          width: size.w * 2,
+          height: size.h * 2,
+          name: `${name} back`,
+        },
         x: at.x,
         y: at.y,
-        removeItemIds: removeSources ? faceRows.map((r) => r.itemId) : [],
+        removeItemIds: removeSources ? pairs.flatMap((p) => (p.backItemId ? [p.front.itemId, p.backItemId] : [p.front.itemId])) : [],
       });
       onClose();
     } catch (e) {
@@ -174,8 +213,14 @@ export function BuildDeckDialog({ itemIds, onClose }: { itemIds: string[]; onClo
               <input type="radio" checked={backSource === 'generated'} onChange={() => setBackSource('generated')} />
               <span>Generate a back</span>
             </label>
-            {backSource === 'generated' && (
+            {needsGenerated && backSource !== 'image' && (
               <div className="sub-options">
+                {backSource === 'paired' && (
+                  <small className="muted">
+                    {unpaired === 1 ? 'One card has' : `${unpaired} cards have`} no back image, so {unpaired === 1 ? 'it gets' : 'they get'} this
+                    generated back.
+                  </small>
+                )}
                 <label className="field inline">
                   <span>Pattern</span>
                   <select value={pattern} onChange={(e) => setPattern(e.target.value as BackPattern)}>
@@ -217,6 +262,31 @@ export function BuildDeckDialog({ itemIds, onClose }: { itemIds: string[]; onClo
                 ))}
               </div>
             )}
+            <label className="radio">
+              <input type="radio" checked={backSource === 'paired'} disabled={rows.length < 2} onChange={() => setBackSource('paired')} />
+              <span>
+                Each card has its own back
+                <small>The selected images include a back for every card.</small>
+              </span>
+            </label>
+            {backSource === 'paired' && (
+              <div className="sub-options">
+                <label className="radio">
+                  <input type="radio" checked={pairOrder === 'alternate'} onChange={() => setPairOrder('alternate')} />
+                  <span>
+                    Alternating
+                    <small>Front, back, front, back… as in a double-sided PDF.</small>
+                  </span>
+                </label>
+                <label className="radio">
+                  <input type="radio" checked={pairOrder === 'halves'} onChange={() => setPairOrder('halves')} />
+                  <span>
+                    Fronts first, then backs
+                    <small>All the fronts, followed by the backs in the same order.</small>
+                  </span>
+                </label>
+              </div>
+            )}
           </fieldset>
 
           <label className="check">
@@ -235,30 +305,42 @@ export function BuildDeckDialog({ itemIds, onClose }: { itemIds: string[]; onClo
             Cards <small>({faceRows.length}, first is the top of the deck)</small>
           </h3>
           <div className="card-rows">
-            {rows.map((r, i) => {
+            {pairs.map(({ front: r, backItemId: pairBackId }) => {
               const it = items[r.itemId] as ImageItem | undefined;
               if (!it) return null;
-              const isBack = backSource === 'image' && r.itemId === backItemId;
+              const backIt = pairBackId ? (items[pairBackId] as ImageItem | undefined) : undefined;
               return (
-                <div key={r.itemId} className={isBack ? 'card-row is-back' : 'card-row'}>
-                  <img src={assetOf(it).src} alt="" />
-                  {isBack ? (
-                    <p className="muted">Used as the card back</p>
-                  ) : (
-                    <div className="card-fields">
-                      <input placeholder="Name" value={r.name} onChange={(e) => setRow(i, { name: e.target.value })} />
-                      <input placeholder="Value" value={r.value} onChange={(e) => setRow(i, { value: e.target.value })} />
-                      <textarea
-                        placeholder="Description"
-                        rows={2}
-                        value={r.description}
-                        onChange={(e) => setRow(i, { description: e.target.value })}
-                      />
-                    </div>
-                  )}
+                <div key={r.itemId} className="card-row">
+                  <div className="card-thumbs">
+                    <img src={assetOf(it).src} alt="Front" title="Front" />
+                    {backSource === 'paired' &&
+                      (backIt ? (
+                        <img src={assetOf(backIt).src} alt="Back" title="Back" />
+                      ) : (
+                        <img src={generatedBack} alt="Generated back" title="Generated back" />
+                      ))}
+                  </div>
+                  <div className="card-fields">
+                    <input placeholder="Name" value={r.name} onChange={(e) => setRow(r.itemId, { name: e.target.value })} />
+                    <input placeholder="Value" value={r.value} onChange={(e) => setRow(r.itemId, { value: e.target.value })} />
+                    <textarea
+                      placeholder="Description"
+                      rows={2}
+                      value={r.description}
+                      onChange={(e) => setRow(r.itemId, { description: e.target.value })}
+                    />
+                  </div>
                 </div>
               );
             })}
+            {backSource === 'image' && backItemId && rows.some((r) => r.itemId === backItemId) && (
+              <div className="card-row is-back">
+                <div className="card-thumbs">
+                  <img src={assetOf(items[backItemId] as ImageItem).src} alt="" />
+                </div>
+                <p className="muted">Used as the card back</p>
+              </div>
+            )}
           </div>
         </section>
       </div>

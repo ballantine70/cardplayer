@@ -129,3 +129,21 @@ describe('board store', () => {
     expect(s().cards[cardId]).toMatchObject({ name: 'a', value: '10', description: 'Ten' });
   });
 });
+
+describe('double-sided decks', () => {
+  beforeEach(() => s().clearBoard());
+
+  it('gives each card its own back, falling back to the shared one', () => {
+    const id = useBoard.getState().createDeck({
+      name: 'Two-sided',
+      cards: [{ ...newCard('front1'), back: asset('back1') }, newCard('front2')],
+      back: asset('shared'),
+      x: 0,
+      y: 0,
+      removeItemIds: [],
+    });
+    const [second, first] = deck(id).cardIds.map((c) => s().cards[c]);
+    expect(s().assets[first.backAssetId].name).toBe('back1');
+    expect(s().assets[second.backAssetId].name).toBe('shared');
+  });
+});

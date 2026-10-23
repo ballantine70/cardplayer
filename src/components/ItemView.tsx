@@ -50,7 +50,8 @@ export function CardFace({ cardId, faceUp }: { cardId: string; faceUp: boolean }
   if (!card) return null;
   return (
     <div className="card" style={{ width: card.width, height: card.height }} title={showFace ? card.name : undefined}>
-      <img src={src} draggable={false} alt={showFace ? card.name : 'Card back'} />
+      {/* A card buried out of this player's sight has no image at all. */}
+      {src && <img src={src} draggable={false} alt={showFace ? card.name : 'Card back'} />}
     </div>
   );
 }

@@ -404,6 +404,13 @@ main {
   object-fit: cover;
   border-radius: 3px;
 }
+.hidden-thumb {
+  width: 28px;
+  height: 40px;
+  border-radius: 3px;
+  background: var(--line);
+  flex-shrink: 0;
+}
 .deck-list-row .name {
   flex: 1;
   overflow: hidden;
@@ -552,13 +559,17 @@ legend {
   gap: 10px;
   align-items: flex-start;
 }
-.card-row > img {
+.card-thumbs {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.card-thumbs img {
   width: 64px;
   height: 64px;
   object-fit: contain;
   background: var(--bg);
   border-radius: 6px;
-  flex-shrink: 0;
 }
 .card-row.is-back {
   opacity: 0.6;

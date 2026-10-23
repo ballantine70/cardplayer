@@ -83,7 +83,7 @@ function InspectorContent() {
             return (
               <li key={id}>
                 <div className="deck-list-row muted">
-                  <img src={assets[c.backAssetId]?.src} alt="" />
+                  {assets[c.backAssetId] ? <img src={assets[c.backAssetId].src} alt="" /> : <span className="hidden-thumb" />}
                   <span className="name">Hidden card</span>
                 </div>
               </li>

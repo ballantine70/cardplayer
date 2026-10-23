@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fitOnCard, isUniform, planDeal, readingOrder, shuffle } from './deckOps';
+import { fitOnCard, isUniform, pairFrontsAndBacks, planDeal, readingOrder, shuffle } from './deckOps';
 
 describe('shuffle', () => {
   it('keeps every element and does not mutate the input', () => {
@@ -61,5 +61,24 @@ describe('readingOrder', () => {
       { id: 'a', x: 0, y: 0, h: 100 },
     ];
     expect(readingOrder(items).map((i) => i.id)).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('pairFrontsAndBacks', () => {
+  it('pairs alternating images', () => {
+    expect(pairFrontsAndBacks(['f1', 'b1', 'f2', 'b2'], 'alternate')).toEqual([
+      { front: 'f1', back: 'b1' },
+      { front: 'f2', back: 'b2' },
+    ]);
+  });
+  it('pairs fronts then backs', () => {
+    expect(pairFrontsAndBacks(['f1', 'f2', 'b1', 'b2'], 'halves')).toEqual([
+      { front: 'f1', back: 'b1' },
+      { front: 'f2', back: 'b2' },
+    ]);
+  });
+  it('leaves the last front without a back when the count is odd', () => {
+    expect(pairFrontsAndBacks(['f1', 'b1', 'f2'], 'alternate')[1]).toEqual({ front: 'f2', back: null });
+    expect(pairFrontsAndBacks(['f1', 'f2', 'b1'], 'halves')[1]).toEqual({ front: 'f2', back: null });
   });
 });

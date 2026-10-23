@@ -93,3 +93,20 @@ export function planDeal(cardIds: readonly string[], players: number, perPlayer:
 export function fileBaseName(name: string): string {
   return name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim();
 }
+
+export type PairOrder = 'alternate' | 'halves';
+
+/**
+ * Split images into card fronts and their backs. `alternate` reads them as
+ * front, back, front, back…; `halves` as all the fronts followed by all the
+ * backs. With an odd count, the last front has no back.
+ */
+export function pairFrontsAndBacks<T>(items: readonly T[], order: PairOrder): { front: T; back: T | null }[] {
+  if (order === 'alternate') {
+    const out: { front: T; back: T | null }[] = [];
+    for (let i = 0; i < items.length; i += 2) out.push({ front: items[i], back: items[i + 1] ?? null });
+    return out;
+  }
+  const fronts = Math.ceil(items.length / 2);
+  return items.slice(0, fronts).map((front, i) => ({ front, back: items[fronts + i] ?? null }));
+}
