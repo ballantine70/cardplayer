@@ -13,6 +13,7 @@ const rows: [string, string][] = [
   ['Shuffle', 'Select a deck and press S'],
   ['Add a label', 'Double-click empty space'],
   ['Hand (online)', 'Drag cards into the tray at the bottom; drag them out to play them'],
+  ['Details panel', 'Press I, or “Details” in the toolbar'],
   ['Delete', 'Delete or Backspace'],
 ];
 

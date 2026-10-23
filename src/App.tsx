@@ -110,6 +110,8 @@ export function App() {
         s.select(Object.keys(s.items));
       } else if (e.ctrlKey || e.metaKey || e.altKey) {
         return;
+      } else if (e.key === 'i') {
+        useUi.getState().toggleDetails();
       } else if (e.key === 'f') {
         s.flip(sel);
       } else if (e.key === 's' && deck) {

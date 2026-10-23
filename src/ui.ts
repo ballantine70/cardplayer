@@ -13,13 +13,35 @@ export type Dialog =
 interface Ui {
   dialog: Dialog | null;
   editingTextId: string | null;
+  /** Whether the details panel is shown. */
+  detailsOpen: boolean;
   openDialog(d: Dialog | null): void;
   setEditingText(id: string | null): void;
+  toggleDetails(open?: boolean): void;
 }
 
-export const useUi = create<Ui>()((set) => ({
+const DETAILS_KEY = 'cardplayer.details';
+
+function storedDetails(): boolean {
+  try {
+    return localStorage.getItem(DETAILS_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export const useUi = create<Ui>()((set, get) => ({
   dialog: null,
   editingTextId: null,
+  detailsOpen: storedDetails(),
   openDialog: (dialog) => set({ dialog }),
   setEditingText: (editingTextId) => set({ editingTextId }),
+  toggleDetails(open = !get().detailsOpen) {
+    set({ detailsOpen: open });
+    try {
+      localStorage.setItem(DETAILS_KEY, open ? '1' : '0');
+    } catch {
+      // Not remembered; harmless.
+    }
+  },
 }));

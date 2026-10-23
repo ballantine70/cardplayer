@@ -13,6 +13,7 @@ export function Toolbar({ onImages }: { onImages: (files: File[]) => void }) {
   const status = useSession((s) => s.status);
   const admin = useSession((s) => s.admin);
   const [copied, setCopied] = useState(false);
+  const detailsOpen = useUi((u) => u.detailsOpen);
 
   return (
     <header className="toolbar no-board">
@@ -51,6 +52,11 @@ export function Toolbar({ onImages }: { onImages: (files: File[]) => void }) {
         </button>
         <button onClick={() => zoomBy(1.25)} aria-label="Zoom in">
           +
+        </button>
+      </div>
+      <div className="group">
+        <button aria-pressed={detailsOpen} title="Show or hide the details panel (I)" onClick={() => useUi.getState().toggleDetails()}>
+          Details
         </button>
       </div>
       <div className="spacer" />

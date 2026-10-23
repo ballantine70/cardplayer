@@ -345,12 +345,27 @@ main {
 
 /* Inspector */
 .inspector {
-  width: 300px;
-  flex-shrink: 0;
+  /* Floats over the board so opening it does not move anything. */
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(300px, 85vw);
   padding: 12px 14px;
   background: var(--panel);
   border-left: 1px solid var(--line);
+  box-shadow: -4px 0 16px #0001;
   overflow-y: auto;
+  z-index: 8;
+}
+.inspector-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+.toolbar button[aria-pressed='true'] {
+  background: var(--bg);
+  border-color: var(--muted);
 }
 .inspector h3 {
   margin: 0 0 10px;

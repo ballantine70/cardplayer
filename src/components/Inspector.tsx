@@ -1,9 +1,24 @@
 import { useState } from 'react';
 import type { Card } from '../types';
 import { useBoard } from '../store';
+import { useUi } from '../ui';
 
-/** Side panel for the metadata of the selected card, deck or label. */
+/** Side panel for the metadata of the selected card, deck or label; shown on request. */
 export function Inspector() {
+  const open = useUi((u) => u.detailsOpen);
+  const toggle = useUi((u) => u.toggleDetails);
+  if (!open) return null;
+  return (
+    <aside className="inspector no-board" aria-label="Details">
+      <button className="icon inspector-close" aria-label="Hide details" title="Hide details (I)" onClick={() => toggle(false)}>
+        ×
+      </button>
+      <InspectorContent />
+    </aside>
+  );
+}
+
+function InspectorContent() {
   const selection = useBoard((s) => s.selection);
   const item = useBoard((s) => (s.selection.length === 1 ? s.items[s.selection[0]] : undefined));
   const cards = useBoard((s) => s.cards);
@@ -12,19 +27,25 @@ export function Inspector() {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   if (!item || item.kind === 'image') {
-    if (selection.length > 1) return <aside className="inspector no-board muted">{selection.length} objects selected</aside>;
-    return null;
+    return (
+      <>
+        <h3>Details</h3>
+        <p className="muted">
+          {selection.length > 1 ? `${selection.length} objects selected.` : 'Select a card, deck or label to see and edit its details.'}
+        </p>
+      </>
+    );
   }
 
   if (item.kind === 'text') {
     return (
-      <aside className="inspector no-board">
+      <>
         <h3>Label</h3>
         <label className="field">
           <span>Text</span>
           <input value={item.text} onChange={(e) => updateItem(item.id, { text: e.target.value })} />
         </label>
-      </aside>
+      </>
     );
   }
 
@@ -33,19 +54,19 @@ export function Inspector() {
     if (!card) return null;
     const showFace = (item.faceUp || !!item.holder) && !card.hidden;
     return (
-      <aside className="inspector no-board">
+      <>
         <h3>{item.holder ? 'Card in your hand' : 'Card'}</h3>
         <img className="inspector-preview" src={assets[showFace ? card.faceAssetId : card.backAssetId]?.src} alt="" />
         {!item.faceUp && !item.holder && <p className="muted">Face down</p>}
         {card.hidden ? <p className="muted">Hidden from you.</p> : <CardFields card={card} />}
-      </aside>
+      </>
     );
   }
 
   // Deck: top card first.
   const ordered = item.cardIds.slice().reverse();
   return (
-    <aside className="inspector no-board">
+    <>
       <h3>Deck</h3>
       <label className="field">
         <span>Name</span>
@@ -81,7 +102,7 @@ export function Inspector() {
           );
         })}
       </ol>
-    </aside>
+    </>
   );
 }
 
