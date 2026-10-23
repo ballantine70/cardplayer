@@ -63,7 +63,6 @@ export interface BackOptions {
   pattern: BackPattern;
   primary: string;
   secondary: string;
-  label: string;
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -128,29 +127,6 @@ export function renderGeneratedBack(w: number, h: number, opts: BackOptions): st
   roundRect(ctx, inset * 1.8, inset * 1.8, w - inset * 3.6, h - inset * 3.6, m * 0.03);
   ctx.stroke();
 
-  // Central medallion with the deck's initials
-  const cx = w / 2;
-  const cy = h / 2;
-  const rad = m * 0.2;
-  ctx.beginPath();
-  ctx.ellipse(cx, cy, rad, rad * 1.25, 0, 0, Math.PI * 2);
-  ctx.fillStyle = opts.primary;
-  ctx.fill();
-  ctx.lineWidth = m * 0.014;
-  ctx.stroke();
-  const initials = opts.label
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((s) => s[0]!.toUpperCase())
-    .join('');
-  if (initials) {
-    ctx.fillStyle = opts.secondary;
-    ctx.font = `600 ${rad * 0.8}px Georgia, serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(initials, cx, cy + rad * 0.05);
-  }
   return canvas.toDataURL('image/png');
 }
 

@@ -77,8 +77,8 @@ export function BuildDeckDialog({ itemIds, onClose }: { itemIds: string[]; onClo
   const [backPreview, setBackPreview] = useState<string>('');
   const [facePreview, setFacePreview] = useState<string>('');
   const generatedBack = useMemo(
-    () => renderGeneratedBack(size.w, size.h, { pattern, primary, secondary, label: name }),
-    [pattern, primary, secondary, name, size.w, size.h],
+    () => renderGeneratedBack(size.w, size.h, { pattern, primary, secondary }),
+    [pattern, primary, secondary, size.w, size.h],
   );
 
   /** A board image as it will appear on a card: as it is, or fitted onto a card. */
